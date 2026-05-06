@@ -21,14 +21,14 @@
 #define TEST true
 
 // Button Input Pins
-#define P1
-#define P2
-#define P3
-#define P4
-#define P5
-#define P6
-#define P7
-#define P8
+#define P1 1
+#define P2 2
+#define P3 3
+#define P4 4
+#define P5 5
+#define P6 6
+#define P7 7
+#define P8 8
 
 // Device Addresses Enumeration
 enum device_addresses_enum

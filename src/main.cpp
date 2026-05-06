@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include "radio.h"
 #include "header.h"
+#include "buttons.h"
 
 /*
 
@@ -80,6 +81,8 @@ void loop()
   }
 
   // TODO Read Buttons
+  uint8_t local_buttons = 0;
+  local_buttons = read_buttons();
 
   // TODO Communicate if Buttons were Pressed
 
