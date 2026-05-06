@@ -20,9 +20,6 @@
 
 RF24 radio(CE_PIN, CSN_PIN); // RF24 Radio
 
-uint64_t local_seq = 0;
-ts_status local_ts_status = TS_STAT_OFF;
-
 transaction_unit local_transaction_unit;
 
 void setup()
@@ -76,7 +73,7 @@ void loop()
   // Start Communication
   if (local_ts_status == TS_STAT_OFF)
   {
-    radio_start_ts(&radio, &local_transaction_unit, &local_seq);
+    radio_start_ts(&radio, &local_transaction_unit);
     local_ts_status = TS_STAT_ON;
   }
 
@@ -85,6 +82,13 @@ void loop()
   local_buttons = read_buttons();
 
   // TODO Communicate if Buttons were Pressed
+  if (local_buttons > 0)
+  {
+    // Communicate local_transaction_unit
+    local_transaction_unit.buttons = local_buttons;
+    local_transaction_unit.command = COMM_BUTTON;
+    radio_transact(&radio, &local_transaction_unit);
+  }
 
   // TODO Check Battery Voltage
 }

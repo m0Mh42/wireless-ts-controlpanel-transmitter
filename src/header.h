@@ -40,6 +40,10 @@ enum device_addresses_enum
 // Device Addresses
 const uint8_t addresses[][4] = {"RX0", "TS1"};
 
+// Local Global-Variables
+uint64_t local_seq = 0;
+ts_status local_ts_status = TS_STAT_OFF;
+
 // Transaction Unit Command Byte
 typedef enum commands_enum
 {
