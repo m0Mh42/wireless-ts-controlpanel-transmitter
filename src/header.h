@@ -1,5 +1,5 @@
 #ifndef _H_HEADER
-#define _H_HEADER
+#define _H_HEADER 1
 
 #include <Arduino.h>
 
@@ -20,6 +20,12 @@
 #define DEBUG false
 #define TEST true
 
+// Battery Voltage Input
+#define BATTERY_INPUT_PIN A0
+#define VOLTAGE_DIVIDER_COEFFICIENT 0.3
+#define BATTERY_FULL_VOLTAGE 12
+#define BATTERY_EMPTY_VOLTAGE 10
+
 // Button Input Pins
 #define P1 1
 #define P2 2
@@ -39,10 +45,6 @@ enum device_addresses_enum
 
 // Device Addresses
 const uint8_t addresses[][4] = {"RX0", "TS1"};
-
-// Local Global-Variables
-uint64_t local_seq = 0;
-ts_status local_ts_status = TS_STAT_OFF;
 
 // Transaction Unit Command Byte
 typedef enum commands_enum
@@ -68,5 +70,8 @@ typedef struct transaction_unit
     uint8_t command;
     uint8_t buttons;
 } transaction_unit;
+
+float mapfloat(float x, long in_min, long in_max, long out_min, long out_max);
+int mapint(float x, long in_min, long in_max, long out_min, long out_max);
 
 #endif

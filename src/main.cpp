@@ -18,7 +18,10 @@
 
 */
 
+// Local Global-Variables
 RF24 radio(CE_PIN, CSN_PIN); // RF24 Radio
+uint64_t local_seq = 0;
+ts_status local_ts_status = TS_STAT_OFF;
 
 transaction_unit local_transaction_unit;
 
@@ -73,7 +76,7 @@ void loop()
   // Start Communication
   if (local_ts_status == TS_STAT_OFF)
   {
-    radio_start_ts(&radio, &local_transaction_unit);
+    radio_start_ts(&radio, &local_transaction_unit, &local_seq);
     local_ts_status = TS_STAT_ON;
   }
 
@@ -87,7 +90,7 @@ void loop()
     // Communicate local_transaction_unit
     local_transaction_unit.buttons = local_buttons;
     local_transaction_unit.command = COMM_BUTTON;
-    radio_transact(&radio, &local_transaction_unit);
+    radio_transact(&radio, &local_transaction_unit, &local_seq);
   }
 
   // TODO Check Battery Voltage
