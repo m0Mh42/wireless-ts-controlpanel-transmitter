@@ -38,6 +38,18 @@ void setup()
   }
 
   // TODO Check Battery Voltage on Startup
+  battery_cap = battery_charge();
+  if (battery_cap < 10)
+  {
+    Serial.println("Battery is low");
+    while (true)
+    {
+      digitalWrite(LED_BUILTIN, HIGH);
+      delay(250);
+      digitalWrite(LED_BUILTIN, LOW);
+      delay(250);
+    }
+  }
 
   // Setup Radio
   radio_setup(&radio);
