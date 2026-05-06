@@ -1,5 +1,19 @@
 #include "radio.h"
 
+bool _radio_sendpacket(RF24 *_radio, transaction_unit *_transaction_unit)
+{
+    // TODO Radio Transmition Error Handling
+    while (true)
+    {
+        bool radio_sent = _radio->write(_transaction_unit, sizeof(transaction_unit));
+        if (radio_sent)
+        {
+            local_seq += 1;
+            break;
+        }
+    }
+}
+
 void radio_setup(RF24 *_radio)
 {
     _radio->begin();
@@ -26,27 +40,11 @@ void radio_start_ts(RF24 *_radio, transaction_unit *_transaction_unit)
     _transaction_unit->buttons = 0;
     _transaction_unit->command = COMM_START_TX;
     _transaction_unit->seq = local_seq;
-    while (true)
-    {
-        bool radio_sent = _radio->write(_transaction_unit, sizeof(transaction_unit));
-        if (radio_sent)
-        {
-            local_seq += 1;
-            break;
-        }
-    }
+    _radio_sendpacket(_radio, _transaction_unit);
 }
 
 void radio_transact(RF24 *_radio, transaction_unit *_transaction_unit)
 {
     _transaction_unit->seq = local_seq;
-    while (true)
-    {
-        bool radio_sent = _radio->write(_transaction_unit, sizeof(transaction_unit));
-        if (radio_sent)
-        {
-            local_seq += 1;
-            break;
-        }
-    }
+    _radio_sendpacket(_radio, _transaction_unit);
 }
