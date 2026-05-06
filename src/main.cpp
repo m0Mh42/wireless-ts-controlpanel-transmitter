@@ -2,6 +2,7 @@
 #include "radio.h"
 #include "header.h"
 #include "buttons.h"
+#include "battery.h"
 
 /*
 
@@ -22,6 +23,8 @@
 RF24 radio(CE_PIN, CSN_PIN); // RF24 Radio
 uint64_t local_seq = 0;
 ts_status local_ts_status = TS_STAT_OFF;
+uint8_t local_buttons = 0, battery_cap = 0;
+bool flag = false;
 
 transaction_unit local_transaction_unit;
 
@@ -81,7 +84,7 @@ void loop()
   }
 
   // TODO Read Buttons
-  uint8_t local_buttons = 0;
+
   local_buttons = read_buttons();
 
   // TODO Communicate if Buttons were Pressed
@@ -94,4 +97,10 @@ void loop()
   }
 
   // TODO Check Battery Voltage
+  battery_cap = battery_charge();
+  if (battery_cap < 50 && flag == false)
+  {
+    Serial.println("Battery is low");
+    flag = true;
+  }
 }
