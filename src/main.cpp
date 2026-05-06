@@ -21,12 +21,11 @@
 
 // Local Global-Variables
 RF24 radio(CE_PIN, CSN_PIN); // RF24 Radio
+transaction_unit local_transaction_unit;
 uint64_t local_seq = 0;
 ts_status local_ts_status = TS_STAT_OFF;
 uint8_t local_buttons = 0, battery_cap = 0;
 bool flag = false;
-
-transaction_unit local_transaction_unit;
 
 void setup()
 {
@@ -57,34 +56,57 @@ void setup()
 
 void loop()
 {
-  if (TEST)
+  while (TEST)
   {
     transaction_unit test_transaction_unit;
-    uint64_t local_seq = 0;
+    bool ack = false;
     test_transaction_unit.command = COMM_START_TX;
-    test_transaction_unit.seq = local_seq;
+    test_transaction_unit.seq = 0;
     test_transaction_unit.buttons = 0U;
     radio.write(&test_transaction_unit, sizeof(test_transaction_unit));
     while (true)
     {
-      test_transaction_unit.command = COMM_BUTTON;
-      test_transaction_unit.seq++;
-      radio.write(&test_transaction_unit, sizeof(test_transaction_unit));
       if (radio.available())
       {
-        radio.read(&test_transaction_unit, sizeof(test_transaction_unit));
-        if (test_transaction_unit.command == COMM_ACK)
+        radio.read(&test_transaction_unit, sizeof(transaction_unit));
+        if (test_transaction_unit.command == COMM_ACK && test_transaction_unit.seq == 1)
         {
-          if (test_transaction_unit.seq != (local_seq + 1))
-          {
-            test_transaction_unit.command = COMM_STOP_TX;
-            test_transaction_unit.seq = 0U;
-            radio.write(&test_transaction_unit, sizeof(test_transaction_unit));
-            break;
-          }
-          continue;
+          ack = true;
+          local_seq = 2;
+          break;
         }
       }
+      delay(250);
+    }
+    while (true)
+    {
+      if (ack)
+      {
+        test_transaction_unit.command = COMM_BUTTON;
+        test_transaction_unit.seq = local_seq;
+        test_transaction_unit.buttons = 0;
+        radio.write(&test_transaction_unit, sizeof(test_transaction_unit));
+        ack = false;
+        local_seq++;
+      }
+      if (radio.available())
+      {
+        radio.read(&test_transaction_unit, sizeof(transaction_unit));
+        if (test_transaction_unit.command == COMM_ACK && test_transaction_unit.seq == local_seq)
+        {
+          ack = true;
+          local_seq++;
+        }
+      }
+      if (digitalRead(13))
+      {
+        test_transaction_unit.command = COMM_STOP_TX;
+        test_transaction_unit.seq = local_seq;
+        test_transaction_unit.buttons = 0;
+        radio.write(&test_transaction_unit, sizeof(test_transaction_unit));
+        break;
+      }
+      delay(1000);
     }
   }
 
@@ -95,11 +117,10 @@ void loop()
     local_ts_status = TS_STAT_ON;
   }
 
-  // TODO Read Buttons
-
+  // Read Buttons
   local_buttons = read_buttons();
 
-  // TODO Communicate if Buttons were Pressed
+  // Communicate if Buttons were Pressed
   if (local_buttons > 0)
   {
     // Communicate local_transaction_unit
