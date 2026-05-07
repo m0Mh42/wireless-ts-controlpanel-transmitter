@@ -53,7 +53,7 @@ typedef enum commands_enum
     COMM_START_TX = 1,
     COMM_BUTTON = 2,
     COMM_STOP_TX = 4,
-    COMM_ACK = 8
+    COMM_DATA = 8
 } commands_enum;
 
 typedef enum ts_status
@@ -69,6 +69,7 @@ typedef struct transaction_unit
     uint64_t seq;
     uint8_t command;
     uint8_t buttons;
+    uint8_t active_unit;
 } transaction_unit;
 
 float mapfloat(float x, long in_min, long in_max, long out_min, long out_max);
