@@ -110,6 +110,9 @@ void loop()
     radio_transact(&radio, &local_transaction_unit);
   }
 
+  // Read Radio Data
+  radio_read(&radio, &local_transaction_unit);
+
   // TODO Display Battery Voltage Error
   battery_cap = battery_charge();
   if (battery_cap < 50 && flag == false)
