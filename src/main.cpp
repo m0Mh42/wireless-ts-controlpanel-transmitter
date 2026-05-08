@@ -37,21 +37,6 @@ void setup()
       ; // Wait for USB Serial
   }
 
-  // TODO Display Battery Low Error on Startup
-  battery_cap = battery_charge();
-  if (battery_cap < 10)
-  {
-    Serial.println("Battery is low");
-    uint32_t time_now = millis();
-    while (millis() - time_now < 5)
-    {
-      digitalWrite(LED_BUILTIN, HIGH);
-      delay(250);
-      digitalWrite(LED_BUILTIN, LOW);
-      delay(250);
-    }
-  }
-
   // Setup Radio
   radio_setup(&radio);
 

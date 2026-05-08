@@ -1,6 +1,6 @@
 #include "glcd.h"
 
-static U8GLIB_ST7920_128X64_1X u8g(GLCD_SCK_PIN, GLCD_MOSI_PIN, GLCD_CS_PIN, GLCD_RESET_PIN);
+static U8GLIB_KS0108_128 u8g(8, 9, 10, 11, 4, 5, 6, 7, 18, 14, 15, 17, 16); // 8Bit Com: D0..D7: 8,9,10,11,4,5,6,7 en=18, cs1=14, cs2=15,di=17,rw=16
 
 static uint8_t current_active_unit = 0;
 static uint8_t current_battery_level = 0;
@@ -29,14 +29,7 @@ static const char *comm_text(bool comm_ok)
 static const char *active_unit_text(uint8_t active_unit)
 {
     static char buffer[16];
-    if (active_unit <= 1)
-    {
-        snprintf(buffer, sizeof(buffer), "UNIT: %s", addresses[active_unit]);
-    }
-    else
-    {
-        snprintf(buffer, sizeof(buffer), "UNIT: N/A");
-    }
+    snprintf(buffer, sizeof(buffer), "UNIT: %d", active_unit);
     return buffer;
 }
 
@@ -67,8 +60,7 @@ static void draw_frame()
 
 void glcd_init()
 {
-    pinMode(GLCD_CS_PIN, OUTPUT);
-    digitalWrite(GLCD_CS_PIN, HIGH);
+    u8g.begin();
     u8g.setFont(u8g_font_6x10);
 }
 

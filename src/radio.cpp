@@ -23,7 +23,6 @@ void radio_setup(RF24 *_radio)
 
 bool radio_transact(RF24 *_radio, transaction_unit *_transaction_unit)
 {
-    // TODO Radio Transmition Error Handling
     const int max_retries = 10;
     for (int retry = 0; retry < max_retries; retry++)
     {
