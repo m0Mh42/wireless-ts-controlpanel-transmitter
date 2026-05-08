@@ -22,7 +22,6 @@
 // Local Global-Variables
 RF24 radio(CE_PIN, CSN_PIN); // RF24 Radio
 transaction_unit local_transaction_unit;
-uint64_t local_seq = 0;
 ts_status local_ts_status = TS_STAT_OFF;
 uint8_t local_buttons = 0, battery_cap = 0, local_active_unit = 0;
 bool flag = false;
@@ -61,7 +60,6 @@ void loop()
   {
     transaction_unit test_transaction_unit;
     bool ack = false;
-    test_transaction_unit.seq = 0U;
     test_transaction_unit.buttons = 0U;
     test_transaction_unit.active_unit = 0U;
     radio.write(&test_transaction_unit, sizeof(test_transaction_unit));
@@ -70,10 +68,9 @@ void loop()
       if (radio.available())
       {
         radio.read(&test_transaction_unit, sizeof(transaction_unit));
-        if (test_transaction_unit.command == COMM_DATA && test_transaction_unit.seq == 1)
+        if (test_transaction_unit.command == COMM_DATA)
         {
           ack = true;
-          local_seq = 2;
           break;
         }
       }
@@ -84,19 +81,16 @@ void loop()
       if (ack)
       {
         test_transaction_unit.command = COMM_BUTTON;
-        test_transaction_unit.seq = local_seq;
         test_transaction_unit.buttons = 0;
         radio.write(&test_transaction_unit, sizeof(test_transaction_unit));
         ack = false;
-        local_seq++;
       }
       if (radio.available())
       {
         radio.read(&test_transaction_unit, sizeof(transaction_unit));
-        if (test_transaction_unit.command == COMM_DATA && test_transaction_unit.seq == local_seq)
+        if (test_transaction_unit.command == COMM_DATA)
         {
           ack = true;
-          local_seq++;
         }
       }
       delay(1000);
@@ -113,7 +107,7 @@ void loop()
     local_transaction_unit.buttons = local_buttons;
     local_transaction_unit.command = COMM_BUTTON;
     local_transaction_unit.active_unit = local_active_unit;
-    radio_transact(&radio, &local_transaction_unit, &local_seq);
+    radio_transact(&radio, &local_transaction_unit);
   }
 
   // TODO Display Battery Voltage Error

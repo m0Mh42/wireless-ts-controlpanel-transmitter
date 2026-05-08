@@ -1,6 +1,6 @@
 #include "radio.h"
 
-bool _radio_sendpacket(RF24 *_radio, transaction_unit *_transaction_unit, uint64_t *_local_seq)
+bool _radio_sendpacket(RF24 *_radio, transaction_unit *_transaction_unit)
 {
     // TODO Radio Transmition Error Handling
     const int max_retries = 10;
@@ -9,7 +9,6 @@ bool _radio_sendpacket(RF24 *_radio, transaction_unit *_transaction_unit, uint64
         bool radio_sent = _radio->write(_transaction_unit, sizeof(transaction_unit));
         if (radio_sent)
         {
-            *_local_seq += 1;
             return true;
         }
         delay(10); // Small delay between retries
@@ -38,8 +37,11 @@ void radio_setup(RF24 *_radio)
     }
 }
 
-void radio_transact(RF24 *_radio, transaction_unit *_transaction_unit, uint64_t *_local_seq)
+void radio_transact(RF24 *_radio, transaction_unit *_transaction_unit)
 {
-    _transaction_unit->seq = *_local_seq;
-    _radio_sendpacket(_radio, _transaction_unit, _local_seq);
+    _radio_sendpacket(_radio, _transaction_unit);
+}
+
+void radio_read(RF24 *_radio, transaction_unit *_transaction_unit)
+{
 }

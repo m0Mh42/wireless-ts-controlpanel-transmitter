@@ -64,7 +64,6 @@ typedef enum ts_status
 // Transaction Unit
 typedef struct transaction_unit
 {
-    uint64_t seq;
     uint8_t command;
     uint8_t buttons;
     uint8_t active_unit;
