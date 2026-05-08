@@ -3,6 +3,7 @@
 #include "header.h"
 #include "buttons.h"
 #include "battery.h"
+#include "glcd.h"
 
 /*
 
@@ -24,6 +25,7 @@ RF24 radio(CE_PIN, CSN_PIN); // RF24 Radio
 transaction_unit local_transaction_unit;
 ts_status local_ts_status = TS_STAT_OFF;
 uint8_t local_buttons = 0, battery_cap = 0, local_active_unit = 0;
+bool local_comm_ok = false;
 bool flag = false;
 
 void setup()
@@ -52,6 +54,10 @@ void setup()
 
   // Setup Radio
   radio_setup(&radio);
+
+  // Initialize the GLCD and show the first status screen.
+  glcd_init();
+  glcd_update(local_active_unit, battery_cap, local_ts_status, local_comm_ok);
 }
 
 void loop()
@@ -101,25 +107,46 @@ void loop()
   local_buttons = read_buttons();
 
   // Communicate if Buttons were Pressed
+  bool current_comm = false;
   if (local_buttons > 0)
   {
     // Communicate local_transaction_unit
     local_transaction_unit.buttons = local_buttons;
     local_transaction_unit.command = COMM_BUTTON;
     local_transaction_unit.active_unit = local_active_unit;
-    radio_transact(&radio, &local_transaction_unit);
+    current_comm = radio_transact(&radio, &local_transaction_unit);
   }
 
   // Read Radio Data
-  radio_read(&radio, &local_transaction_unit);
-
-  // TODO Display Battery Voltage Error
-  battery_cap = battery_charge();
-  if (battery_cap < 50 && flag == false)
+  bool radio_received = radio_read(&radio, &local_transaction_unit);
+  if (radio_received)
   {
-    Serial.println("Battery is low");
-    flag = true;
+    current_comm = true;
+    if (local_transaction_unit.command == COMM_DATA)
+    {
+      local_active_unit = local_transaction_unit.active_unit;
+    }
   }
+
+  local_comm_ok = current_comm;
+
+  // Update battery and status
+  battery_cap = battery_charge();
+  if (battery_cap < 50)
+  {
+    if (!flag)
+    {
+      Serial.println("Battery is low");
+      flag = true;
+    }
+    local_ts_status = TS_STAT_BATTERYLOW;
+  }
+  else
+  {
+    local_ts_status = TS_STAT_ON;
+  }
+
+  glcd_update(local_active_unit, battery_cap, local_ts_status, local_comm_ok);
 
   delay(100); // Small delay to prevent busy loop
 }
