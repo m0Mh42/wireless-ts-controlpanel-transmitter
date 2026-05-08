@@ -27,14 +27,14 @@
 #define BATTERY_EMPTY_VOLTAGE 10
 
 // Button Input Pins
-#define P1 1
-#define P2 2
-#define P3 3
-#define P4 4
-#define P5 5
-#define P6 6
-#define P7 7
-#define P8 8
+#define P1 2
+#define P2 3
+#define P3 4
+#define P4 5
+#define P5 6
+#define P6 7
+#define P7 8
+#define P8 9
 
 // Device Addresses Enumeration
 enum device_addresses_enum
@@ -50,9 +50,7 @@ const uint8_t addresses[][4] = {"RX0", "TS1"};
 typedef enum commands_enum
 {
     COMM_NOTHING = 0,
-    COMM_START_TX = 1,
-    COMM_BUTTON = 2,
-    COMM_STOP_TX = 4,
+    COMM_BUTTON = 1,
     COMM_DATA = 8
 } commands_enum;
 

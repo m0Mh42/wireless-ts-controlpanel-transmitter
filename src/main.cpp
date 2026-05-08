@@ -36,12 +36,13 @@ void setup()
       ; // Wait for USB Serial
   }
 
-  // TODO Check Battery Voltage on Startup
+  // TODO Display Battery Low Error on Startup
   battery_cap = battery_charge();
   if (battery_cap < 10)
   {
     Serial.println("Battery is low");
-    while (true)
+    uint32_t time_now = millis();
+    while (millis() - time_now < 5)
     {
       digitalWrite(LED_BUILTIN, HIGH);
       delay(250);
@@ -60,7 +61,6 @@ void loop()
   {
     transaction_unit test_transaction_unit;
     bool ack = false;
-    test_transaction_unit.command = COMM_START_TX;
     test_transaction_unit.seq = 0U;
     test_transaction_unit.buttons = 0U;
     test_transaction_unit.active_unit = 0U;
@@ -99,23 +99,8 @@ void loop()
           local_seq++;
         }
       }
-      if (digitalRead(13))
-      {
-        test_transaction_unit.command = COMM_STOP_TX;
-        test_transaction_unit.seq = local_seq;
-        test_transaction_unit.buttons = 0;
-        radio.write(&test_transaction_unit, sizeof(test_transaction_unit));
-        break;
-      }
       delay(1000);
     }
-  }
-
-  // Start Communication
-  if (local_ts_status == TS_STAT_OFF)
-  {
-    radio_start_ts(&radio, &local_transaction_unit, &local_seq);
-    local_ts_status = TS_STAT_ON;
   }
 
   // Read Buttons
@@ -131,11 +116,13 @@ void loop()
     radio_transact(&radio, &local_transaction_unit, &local_seq);
   }
 
-  // TODO Check Battery Voltage
+  // TODO Display Battery Voltage Error
   battery_cap = battery_charge();
   if (battery_cap < 50 && flag == false)
   {
     Serial.println("Battery is low");
     flag = true;
   }
+
+  delay(100); // Small delay to prevent busy loop
 }
