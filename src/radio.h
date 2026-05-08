@@ -6,9 +6,8 @@
 #include <RF24.h>
 #include "header.h"
 
-bool _radio_sendpacket(RF24 *_radio, transaction_unit *_transaction_unit);
 void radio_setup(RF24 *_radio);
-void radio_transact(RF24 *_radio, transaction_unit *_transaction_unit);
-void radio_read(RF24 *_radio, transaction_unit *_transaction_unit);
+bool radio_transact(RF24 *_radio, transaction_unit *_transaction_unit);
+bool radio_read(RF24 *_radio, transaction_unit *_transaction_unit);
 
 #endif
