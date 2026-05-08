@@ -26,16 +26,6 @@
 #define BATTERY_FULL_VOLTAGE 12
 #define BATTERY_EMPTY_VOLTAGE 10
 
-// Button Input Pins
-#define P1 2
-#define P2 3
-#define P3 4
-#define P4 5
-#define P5 6
-#define P6 7
-#define P7 8
-#define P8 9
-
 // Device Addresses Enumeration
 enum device_addresses_enum
 {
