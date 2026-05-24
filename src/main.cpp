@@ -58,12 +58,11 @@ void loop()
     test_transaction_unit.buttons = 0U;
     test_transaction_unit.active_unit = 0U;
     test_transaction_unit.command = COMM_START_TX;
-    radio.write(&test_transaction_unit, sizeof(test_transaction_unit));
+    radio_transact(&radio, &test_transaction_unit);
     while (true)
     {
-      if (radio.available())
+      if (radio_read(&radio, &test_transaction_unit))
       {
-        radio.read(&test_transaction_unit, sizeof(transaction_unit));
         if (test_transaction_unit.command == COMM_ACK)
         {
           ack = true;
@@ -81,18 +80,17 @@ void loop()
         {
           test_transaction_unit.command = COMM_STOP_TX;
           test_transaction_unit.buttons = 0;
-          radio.write(&test_transaction_unit, sizeof(test_transaction_unit));
+          radio_transact(&radio, &test_transaction_unit);
           exit(0);
         }
 
         test_transaction_unit.command = COMM_BUTTON;
         test_transaction_unit.buttons = local_buttons++;
-        radio.write(&test_transaction_unit, sizeof(test_transaction_unit));
+        radio_transact(&radio, &test_transaction_unit);
         ack = false;
       }
-      if (radio.available())
+      if (radio_read(&radio, &test_transaction_unit))
       {
-        radio.read(&test_transaction_unit, sizeof(transaction_unit));
         if (test_transaction_unit.command == COMM_ACK)
         {
           ack = true;
