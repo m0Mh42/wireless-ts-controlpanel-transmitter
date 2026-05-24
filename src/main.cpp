@@ -38,19 +38,15 @@ void setup()
       ; // Wait for USB Serial
   }
 
-  Serial.println("TEST");
-
   // Setup Radio
   radio_setup(&radio);
 
-  Serial.println("TEST2");
-
   // Initialize the TM1638 button scanner
-  // buttons_begin();
+  buttons_begin();
 
   // Initialize the GLCD and show the first status screen.
-  // glcd_init();
-  // glcd_update(local_active_unit, battery_cap, local_ts_status, local_comm_ok);
+  glcd_init();
+  glcd_update(local_active_unit, battery_cap, local_ts_status, local_comm_ok);
 }
 
 void loop()
@@ -62,7 +58,6 @@ void loop()
     test_transaction_unit.buttons = 0U;
     test_transaction_unit.active_unit = 0U;
     test_transaction_unit.command = COMM_START_TX;
-    digitalWrite(LED_BUILTIN, HIGH);
     radio.write(&test_transaction_unit, sizeof(test_transaction_unit));
     while (true)
     {
@@ -71,7 +66,6 @@ void loop()
         radio.read(&test_transaction_unit, sizeof(transaction_unit));
         if (test_transaction_unit.command == COMM_ACK)
         {
-          digitalWrite(LED_BUILTIN, LOW);
           ack = true;
           break;
         }
@@ -94,7 +88,6 @@ void loop()
         test_transaction_unit.command = COMM_BUTTON;
         test_transaction_unit.buttons = local_buttons++;
         radio.write(&test_transaction_unit, sizeof(test_transaction_unit));
-        digitalWrite(LED_BUILTIN, HIGH);
         ack = false;
       }
       if (radio.available())
@@ -102,7 +95,6 @@ void loop()
         radio.read(&test_transaction_unit, sizeof(transaction_unit));
         if (test_transaction_unit.command == COMM_ACK)
         {
-          digitalWrite(LED_BUILTIN, LOW);
           ack = true;
         }
       }
