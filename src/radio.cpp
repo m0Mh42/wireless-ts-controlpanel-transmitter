@@ -3,8 +3,8 @@
 void radio_setup(RF24 *_radio)
 {
     _radio->begin();
-    _radio->openWritingPipe(addresses[DEVICE_TS_SLAVE]);    // TS 1
-    _radio->openReadingPipe(1, addresses[DEVICE_TS_SLAVE]); // Master Reciever
+    _radio->openWritingPipe(addresses[DEVICE_MASTER]);    // TS 1
+    _radio->openReadingPipe(1, addresses[DEVICE_MASTER]); // Master Reciever
     _radio->setPALevel(RF24_PA_MAX);
     _radio->setChannel(CHANNEL);
 

@@ -17,7 +17,7 @@
 #endif
 
 #define CHANNEL 42
-#define DEBUG false
+#define DEBUG true
 #define TEST true
 
 // Battery Voltage Input
@@ -40,8 +40,11 @@ const uint8_t addresses[][4] = {"RX0", "TS1"};
 typedef enum commands_enum
 {
     COMM_NOTHING = 0,
-    COMM_BUTTON = 1,
-    COMM_DATA = 8
+    COMM_START_TX = 1,
+    COMM_BUTTON = 2,
+    COMM_STOP_TX = 4,
+    COMM_DATA = 8,
+    COMM_ACK = 16
 } commands_enum;
 
 typedef enum ts_status

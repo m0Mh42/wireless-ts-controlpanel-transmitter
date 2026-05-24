@@ -1,15 +1,14 @@
 #include "buttons.h"
 
+static TM1638 tm1638Buttons(BUTTONS_TM1638_DIO_PIN, BUTTONS_TM1638_CLK_PIN, BUTTONS_TM1638_STB_PIN, 8, false, 0);
+
+void buttons_begin()
+{
+    tm1638Buttons.begin(false, 0);
+}
+
 uint8_t read_buttons()
 {
-    uint8_t buttons = 0;
-    buttons |= digitalRead(P1);
-    buttons |= (digitalRead(P2) << 1);
-    buttons |= (digitalRead(P3) << 2);
-    buttons |= (digitalRead(P4) << 3);
-    buttons |= (digitalRead(P5) << 4);
-    buttons |= (digitalRead(P6) << 5);
-    buttons |= (digitalRead(P7) << 6);
-    buttons |= (digitalRead(P8) << 7);
-    return buttons;
+    uint32_t rawButtons = tm1638Buttons.getButtons();
+    return (uint8_t)(rawButtons & 0xFF);
 }

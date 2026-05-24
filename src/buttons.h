@@ -2,17 +2,14 @@
 #define _H_BUTTONS
 
 #include "header.h"
+#include <TM1638.h>
 
-// Button Input Pins
-#define P1 2
-#define P2 3
-#define P3 4
-#define P4 5
-#define P5 6
-#define P6 7
-#define P7 8
-#define P8 9
+// TM1638 button IC pins
+#define BUTTONS_TM1638_DIO_PIN A1
+#define BUTTONS_TM1638_CLK_PIN A2
+#define BUTTONS_TM1638_STB_PIN A3
 
+void buttons_begin();
 uint8_t read_buttons();
 
 #endif

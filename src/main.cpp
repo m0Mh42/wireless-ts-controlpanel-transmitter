@@ -24,7 +24,8 @@
 RF24 radio(CE_PIN, CSN_PIN); // RF24 Radio
 transaction_unit local_transaction_unit;
 ts_status local_ts_status = TS_STAT_OFF;
-uint8_t local_buttons = 0, battery_cap = 0, local_active_unit = 0;
+uint8_t local_buttons = 0;
+uint8_t battery_cap = 0, local_active_unit = 0;
 bool local_comm_ok = false;
 bool flag = false;
 
@@ -37,12 +38,19 @@ void setup()
       ; // Wait for USB Serial
   }
 
+  Serial.println("TEST");
+
   // Setup Radio
   radio_setup(&radio);
 
+  Serial.println("TEST2");
+
+  // Initialize the TM1638 button scanner
+  // buttons_begin();
+
   // Initialize the GLCD and show the first status screen.
-  glcd_init();
-  glcd_update(local_active_unit, battery_cap, local_ts_status, local_comm_ok);
+  // glcd_init();
+  // glcd_update(local_active_unit, battery_cap, local_ts_status, local_comm_ok);
 }
 
 void loop()
@@ -53,38 +61,52 @@ void loop()
     bool ack = false;
     test_transaction_unit.buttons = 0U;
     test_transaction_unit.active_unit = 0U;
+    test_transaction_unit.command = COMM_START_TX;
+    digitalWrite(LED_BUILTIN, HIGH);
     radio.write(&test_transaction_unit, sizeof(test_transaction_unit));
     while (true)
     {
       if (radio.available())
       {
         radio.read(&test_transaction_unit, sizeof(transaction_unit));
-        if (test_transaction_unit.command == COMM_DATA)
+        if (test_transaction_unit.command == COMM_ACK)
         {
+          digitalWrite(LED_BUILTIN, LOW);
           ack = true;
           break;
         }
       }
-      delay(250);
+      delay(100);
     }
+    local_buttons = 0;
     while (true)
     {
       if (ack)
       {
+        if (digitalRead(2))
+        {
+          test_transaction_unit.command = COMM_STOP_TX;
+          test_transaction_unit.buttons = 0;
+          radio.write(&test_transaction_unit, sizeof(test_transaction_unit));
+          exit(0);
+        }
+
         test_transaction_unit.command = COMM_BUTTON;
-        test_transaction_unit.buttons = 0;
+        test_transaction_unit.buttons = local_buttons++;
         radio.write(&test_transaction_unit, sizeof(test_transaction_unit));
+        digitalWrite(LED_BUILTIN, HIGH);
         ack = false;
       }
       if (radio.available())
       {
         radio.read(&test_transaction_unit, sizeof(transaction_unit));
-        if (test_transaction_unit.command == COMM_DATA)
+        if (test_transaction_unit.command == COMM_ACK)
         {
+          digitalWrite(LED_BUILTIN, LOW);
           ack = true;
         }
       }
-      delay(1000);
+      delay(250);
     }
   }
 
