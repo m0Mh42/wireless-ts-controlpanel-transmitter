@@ -3,10 +3,17 @@
 void radio_setup(RF24 *_radio)
 {
     _radio->begin();
-    _radio->openWritingPipe(addresses[DEVICE_MASTER]);    // TS 1
-    _radio->openReadingPipe(1, addresses[DEVICE_MASTER]); // Master Reciever
+
+    // Write to master receiver address (RX0), listen on our own address (TS1)
+    _radio->openWritingPipe(addresses[DEVICE_MASTER]);
+    _radio->openReadingPipe(1, addresses[DEVICE_TS_SLAVE]);
+
     _radio->setPALevel(RF24_PA_MAX);
     _radio->setChannel(CHANNEL);
+    _radio->setAutoAck(true);
+    _radio->setRetries(5, 15);
+    _radio->setDataRate(RF24_250KBPS);
+    _radio->setPayloadSize(sizeof(transaction_unit));
 
     // Defected Chip Error
     if (!_radio->isChipConnected())

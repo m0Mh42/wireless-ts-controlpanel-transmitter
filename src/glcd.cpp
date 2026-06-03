@@ -4,7 +4,7 @@
 static U8GLIB_KS0108_128 u8g(GLCD_COMM_D0, GLCD_COMM_D1, GLCD_COMM_D2,
                              GLCD_COMM_D3, GLCD_COMM_D4, GLCD_COMM_D5,
                              GLCD_COMM_D6, GLCD_COMM_D7, GLCD_COMM_EN,
-                             GLCD_COMM_CS1, GLCD_COMM_CS2, GLCD_COMM_DI, GLCD_COMM_RW);
+                             GLCD_COMM_CS1, GLCD_COMM_CS2, GLCD_COMM_DI);
 
 static uint8_t current_active_unit = 0;
 static uint8_t current_battery_level = 0;

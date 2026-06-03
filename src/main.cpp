@@ -4,6 +4,7 @@
 #include "buttons.h"
 #include "battery.h"
 #include "glcd.h"
+#include "error.h"
 
 /*
 
@@ -31,28 +32,27 @@ bool flag = false;
 
 void setup()
 {
-  if (DEBUG || TEST)
-  {
+#if DEBUG || TEST
     Serial.begin(9600);
     while (!Serial)
-      ; // Wait for USB Serial
-  }
+        ; // Wait for USB Serial
+#endif
 
-  // Setup Radio
-  radio_setup(&radio);
+    // Setup Radio
+    radio_setup(&radio);
 
-  // Initialize the TM1638 button scanner
-  buttons_begin();
+    // Initialize the TM1638 button scanner
+    buttons_begin();
 
-  // Initialize the GLCD and show the first status screen.
-  glcd_init();
-  glcd_update(local_active_unit, battery_cap, local_ts_status, local_comm_ok);
+    // Initialize the GLCD and show the first status screen.
+    glcd_init();
+    glcd_update(local_active_unit, battery_cap, local_ts_status, local_comm_ok);
 }
 
-void loop()
+#if TEST
+
+static void test_mode()
 {
-  while (TEST)
-  {
     transaction_unit test_transaction_unit;
     bool ack = false;
     test_transaction_unit.buttons = 0U;
@@ -61,89 +61,121 @@ void loop()
     radio_transact(&radio, &test_transaction_unit);
     while (true)
     {
-      if (radio_read(&radio, &test_transaction_unit))
-      {
-        if (test_transaction_unit.command == COMM_ACK)
+        if (radio_read(&radio, &test_transaction_unit))
         {
-          ack = true;
-          break;
+            if (test_transaction_unit.command == COMM_ACK)
+            {
+                ack = true;
+                break;
+            }
         }
-      }
-      delay(100);
+        delay(100);
     }
     local_buttons = 0;
     while (true)
     {
-      if (ack)
-      {
-        if (digitalRead(2))
+        if (ack)
         {
-          test_transaction_unit.command = COMM_STOP_TX;
-          test_transaction_unit.buttons = 0;
-          radio_transact(&radio, &test_transaction_unit);
-          exit(0);
-        }
+            if (digitalRead(2))
+            {
+                test_transaction_unit.command = COMM_STOP_TX;
+                test_transaction_unit.buttons = 0;
+                radio_transact(&radio, &test_transaction_unit);
+                while (true)
+                {
+                    error_set(ERROR_NONE);
+                    delay(100);
+                }
+            }
 
-        test_transaction_unit.command = COMM_BUTTON;
-        test_transaction_unit.buttons = local_buttons++;
-        radio_transact(&radio, &test_transaction_unit);
-        ack = false;
-      }
-      if (radio_read(&radio, &test_transaction_unit))
-      {
-        if (test_transaction_unit.command == COMM_ACK)
+            test_transaction_unit.command = COMM_BUTTON;
+            test_transaction_unit.buttons = local_buttons++;
+            radio_transact(&radio, &test_transaction_unit);
+            ack = false;
+        }
+        if (radio_read(&radio, &test_transaction_unit))
         {
-          ack = true;
+            if (test_transaction_unit.command == COMM_ACK)
+            {
+                ack = true;
+            }
         }
-      }
-      delay(250);
+        delay(250);
     }
-  }
+}
 
-  // Read Buttons
-  local_buttons = read_buttons();
+#endif
 
-  // Communicate if Buttons were Pressed
-  bool current_comm = false;
-  if (local_buttons > 0)
-  {
-    // Communicate local_transaction_unit
-    local_transaction_unit.buttons = local_buttons;
-    local_transaction_unit.command = COMM_BUTTON;
-    local_transaction_unit.active_unit = local_active_unit;
-    current_comm = radio_transact(&radio, &local_transaction_unit);
-  }
+void loop()
+{
+#if TEST
+    test_mode();
+    return;
+#endif
 
-  // Read Radio Data
-  bool radio_received = radio_read(&radio, &local_transaction_unit);
-  if (radio_received)
-  {
-    current_comm = true;
-    if (local_transaction_unit.command == COMM_DATA)
+    // Read Buttons
+    local_buttons = read_buttons();
+
+    // Communicate if Buttons were Pressed
+    bool current_comm = false;
+    if (local_buttons > 0)
     {
-      local_active_unit = local_transaction_unit.active_unit;
+        local_transaction_unit.buttons = local_buttons;
+        local_transaction_unit.command = COMM_BUTTON;
+        local_transaction_unit.active_unit = local_active_unit;
+        current_comm = radio_transact(&radio, &local_transaction_unit);
+        if (!current_comm)
+        {
+            error_set(ERROR_TRANSMIT_FAILED);
+        }
+        else
+        {
+            error_clear(ERROR_TRANSMIT_FAILED);
+        }
     }
-  }
 
-  local_comm_ok = current_comm;
-
-  // Update battery and status
-  battery_cap = battery_charge();
-  if (battery_cap < 50)
-  {
-    if (!flag)
+    // Read Radio Data
+    bool radio_received = radio_read(&radio, &local_transaction_unit);
+    if (radio_received)
     {
-      Serial.println("Battery is low");
-      flag = true;
+        current_comm = true;
+        if (local_transaction_unit.command == COMM_DATA)
+        {
+            local_active_unit = local_transaction_unit.active_unit;
+        }
     }
-    local_ts_status = TS_STAT_BATTERYLOW;
-  }
-  else
-  {
-    local_ts_status = TS_STAT_ON;
-  }
 
-  glcd_update(local_active_unit, battery_cap, local_ts_status, local_comm_ok);
+    local_comm_ok = current_comm;
+    if (!current_comm)
+    {
+        error_set(ERROR_NO_COMMUNICATION);
+    }
+    else
+    {
+        error_clear(ERROR_NO_COMMUNICATION);
+    }
 
-  delay(100); // Small delay to prevent busy loop
+    // Update battery and status
+    battery_cap = battery_charge();
+    if (battery_cap < 50)
+    {
+        if (!flag)
+        {
+            if (DEBUG)
+            {
+                Serial.println("Battery is low");
+            }
+            flag = true;
+        }
+        local_ts_status = TS_STAT_BATTERYLOW;
+    }
+    else
+    {
+        local_ts_status = TS_STAT_ON;
+    }
+
+    glcd_update(local_active_unit, battery_cap, local_ts_status, local_comm_ok);
+    transaction_error_handling();
+
+    delay(100);
 }

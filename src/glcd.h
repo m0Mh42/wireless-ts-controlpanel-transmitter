@@ -16,7 +16,6 @@
 #define GLCD_COMM_CS1 A1
 #define GLCD_COMM_CS2 A2
 #define GLCD_COMM_DI A3
-#define GLCD_COMM_RW A6
 
 void glcd_init();
 void glcd_update(uint8_t active_unit, uint8_t battery_level, ts_status status, bool comm_ok);

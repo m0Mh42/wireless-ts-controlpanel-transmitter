@@ -17,10 +17,19 @@
 #endif
 
 #define CHANNEL 42
-#define DEBUG true
-#define TEST true
+
+#ifndef DEBUG
+#define DEBUG 0
+#endif
+
+#ifndef TEST
+#define TEST 0
+#endif
 
 // Battery Voltage Input
+// NOTE: A0 is shared with GLCD_COMM_EN. When TEST=1, GLCD is not used so A0 is free for battery.
+// When TEST=0, GLCD and battery share A0 - this is a hardware conflict that requires rewiring.
+// See KNOWN_ISSUES.md for details on resolving this.
 #define BATTERY_INPUT_PIN A0
 #define VOLTAGE_DIVIDER_COEFFICIENT 0.3
 #define BATTERY_FULL_VOLTAGE 12
