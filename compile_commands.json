@@ -1,0 +1,44 @@
+[
+    {
+        "command": "C:\\Users\\m0Mh42\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.MSVCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin\\g++.exe -o .pio\\build\\native\\src\\battery.o -c -DPLATFORMIO=60119 -D__AVR_ATmega328P__ -DCHANNEL=42 -DTEST=0 -DDEBUG=0 -Iinclude -Itest\\mocks -Isrc src\\battery.cpp",
+        "directory": "D:\\Projects\\wireless-uteco-controlpanel\\program\\transmitter\\rf24-uteco-ts-transmitter",
+        "file": "src\\battery.cpp",
+        "output": ".pio\\build\\native\\src\\battery.o"
+    },
+    {
+        "command": "C:\\Users\\m0Mh42\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.MSVCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin\\g++.exe -o .pio\\build\\native\\src\\buttons.o -c -DPLATFORMIO=60119 -D__AVR_ATmega328P__ -DCHANNEL=42 -DTEST=0 -DDEBUG=0 -Iinclude -Itest\\mocks -Isrc src\\buttons.cpp",
+        "directory": "D:\\Projects\\wireless-uteco-controlpanel\\program\\transmitter\\rf24-uteco-ts-transmitter",
+        "file": "src\\buttons.cpp",
+        "output": ".pio\\build\\native\\src\\buttons.o"
+    },
+    {
+        "command": "C:\\Users\\m0Mh42\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.MSVCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin\\g++.exe -o .pio\\build\\native\\src\\error.o -c -DPLATFORMIO=60119 -D__AVR_ATmega328P__ -DCHANNEL=42 -DTEST=0 -DDEBUG=0 -Iinclude -Itest\\mocks -Isrc src\\error.cpp",
+        "directory": "D:\\Projects\\wireless-uteco-controlpanel\\program\\transmitter\\rf24-uteco-ts-transmitter",
+        "file": "src\\error.cpp",
+        "output": ".pio\\build\\native\\src\\error.o"
+    },
+    {
+        "command": "C:\\Users\\m0Mh42\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.MSVCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin\\g++.exe -o .pio\\build\\native\\src\\glcd.o -c -DPLATFORMIO=60119 -D__AVR_ATmega328P__ -DCHANNEL=42 -DTEST=0 -DDEBUG=0 -Iinclude -Itest\\mocks -Isrc src\\glcd.cpp",
+        "directory": "D:\\Projects\\wireless-uteco-controlpanel\\program\\transmitter\\rf24-uteco-ts-transmitter",
+        "file": "src\\glcd.cpp",
+        "output": ".pio\\build\\native\\src\\glcd.o"
+    },
+    {
+        "command": "C:\\Users\\m0Mh42\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.MSVCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin\\g++.exe -o .pio\\build\\native\\src\\header.o -c -DPLATFORMIO=60119 -D__AVR_ATmega328P__ -DCHANNEL=42 -DTEST=0 -DDEBUG=0 -Iinclude -Itest\\mocks -Isrc src\\header.cpp",
+        "directory": "D:\\Projects\\wireless-uteco-controlpanel\\program\\transmitter\\rf24-uteco-ts-transmitter",
+        "file": "src\\header.cpp",
+        "output": ".pio\\build\\native\\src\\header.o"
+    },
+    {
+        "command": "C:\\Users\\m0Mh42\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.MSVCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin\\g++.exe -o .pio\\build\\native\\src\\main.o -c -DPLATFORMIO=60119 -D__AVR_ATmega328P__ -DCHANNEL=42 -DTEST=0 -DDEBUG=0 -Iinclude -Itest\\mocks -Isrc src\\main.cpp",
+        "directory": "D:\\Projects\\wireless-uteco-controlpanel\\program\\transmitter\\rf24-uteco-ts-transmitter",
+        "file": "src\\main.cpp",
+        "output": ".pio\\build\\native\\src\\main.o"
+    },
+    {
+        "command": "C:\\Users\\m0Mh42\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.MSVCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin\\g++.exe -o .pio\\build\\native\\src\\radio.o -c -DPLATFORMIO=60119 -D__AVR_ATmega328P__ -DCHANNEL=42 -DTEST=0 -DDEBUG=0 -Iinclude -Itest\\mocks -Isrc src\\radio.cpp",
+        "directory": "D:\\Projects\\wireless-uteco-controlpanel\\program\\transmitter\\rf24-uteco-ts-transmitter",
+        "file": "src\\radio.cpp",
+        "output": ".pio\\build\\native\\src\\radio.o"
+    }
+]

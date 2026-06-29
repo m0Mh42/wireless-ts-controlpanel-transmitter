@@ -21,6 +21,9 @@
 
 */
 
+// No-activity timeout before the link is considered lost (ms).
+#define COMM_TIMEOUT_MS 500UL
+
 // Local Global-Variables
 RF24 radio(CE_PIN, CSN_PIN); // RF24 Radio
 transaction_unit local_transaction_unit;
@@ -28,7 +31,8 @@ ts_status local_ts_status = TS_STAT_OFF;
 uint8_t local_buttons = 0;
 uint8_t battery_cap = 0, local_active_unit = 0;
 bool local_comm_ok = false;
-bool flag = false;
+unsigned long last_comm_ms = 0;  // millis() of the last successful tx or rx
+bool battery_low_logged = false;
 
 void setup()
 {
@@ -117,36 +121,36 @@ void loop()
     local_buttons = read_buttons();
 
     // Communicate if Buttons were Pressed
-    bool current_comm = false;
     if (local_buttons > 0)
     {
         local_transaction_unit.buttons = local_buttons;
         local_transaction_unit.command = COMM_BUTTON;
         local_transaction_unit.active_unit = local_active_unit;
-        current_comm = radio_transact(&radio, &local_transaction_unit);
-        if (!current_comm)
+        bool sent = radio_transact(&radio, &local_transaction_unit);
+        if (!sent)
         {
             error_set(ERROR_TRANSMIT_FAILED);
         }
         else
         {
             error_clear(ERROR_TRANSMIT_FAILED);
+            last_comm_ms = millis();
         }
     }
 
     // Read Radio Data
-    bool radio_received = radio_read(&radio, &local_transaction_unit);
-    if (radio_received)
+    if (radio_read(&radio, &local_transaction_unit))
     {
-        current_comm = true;
+        last_comm_ms = millis();
         if (local_transaction_unit.command == COMM_DATA)
         {
             local_active_unit = local_transaction_unit.active_unit;
         }
     }
 
-    local_comm_ok = current_comm;
-    if (!current_comm)
+    // Link is healthy if we had successful activity within the timeout window.
+    local_comm_ok = (millis() - last_comm_ms) < COMM_TIMEOUT_MS;
+    if (!local_comm_ok)
     {
         error_set(ERROR_NO_COMMUNICATION);
     }
@@ -159,18 +163,19 @@ void loop()
     battery_cap = battery_charge();
     if (battery_cap < 50)
     {
-        if (!flag)
+        if (!battery_low_logged)
         {
             if (DEBUG)
             {
                 Serial.println("Battery is low");
             }
-            flag = true;
+            battery_low_logged = true;
         }
         local_ts_status = TS_STAT_BATTERYLOW;
     }
     else
     {
+        battery_low_logged = false;
         local_ts_status = TS_STAT_ON;
     }
 

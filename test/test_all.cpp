@@ -578,8 +578,15 @@ static void test_multiple_errors_track_separately(void)
     mock_reset();
     error_set(ERROR_TRANSMIT_FAILED);
     error_set(ERROR_NO_COMMUNICATION);
-    TEST_ASSERT_EQUAL_INT(ERROR_NO_COMMUNICATION, error_state);
+    // Both bits must be active simultaneously.
+    TEST_ASSERT_TRUE(error_is_active(ERROR_TRANSMIT_FAILED));
+    TEST_ASSERT_TRUE(error_is_active(ERROR_NO_COMMUNICATION));
+    TEST_ASSERT_FALSE(error_is_active(ERROR_BATTERY_LOW));
     TEST_ASSERT_EQUAL_INT(2, error_counter);
+    // Clearing one must not affect the other.
+    error_clear(ERROR_TRANSMIT_FAILED);
+    TEST_ASSERT_FALSE(error_is_active(ERROR_TRANSMIT_FAILED));
+    TEST_ASSERT_TRUE(error_is_active(ERROR_NO_COMMUNICATION));
 }
 
 static void test_error_update_led_battery_low_blinks(void)
