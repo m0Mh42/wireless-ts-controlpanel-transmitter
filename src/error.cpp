@@ -8,6 +8,9 @@ static bool led_state = false;
 
 void error_set(error_type_enum error)
 {
+    if (error == ERROR_NONE || error_is_active(error))
+        return;
+
     error_state |= (uint8_t)error;
     if (error_counter < 65535U)
         error_counter++;

@@ -2,6 +2,7 @@
 #define _H_HEADER 1
 
 #include <Arduino.h>
+#include "safety_protocol.h"
 
 #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega328PB__) || defined(__AVR_ATmega2560__) || defined(__AVR_ATmega1280__)
 #define CSN_PIN 10
@@ -13,10 +14,13 @@
 #define CSN_PIN D8
 #define CE_PIN D4
 #else
-#error "Make Config yourself"
+#define CSN_PIN 10
+#define CE_PIN 9
 #endif
 
-#define CHANNEL 42
+#ifndef CHANNEL
+#define CHANNEL 78
+#endif
 
 #ifndef DEBUG
 #define DEBUG 0
@@ -26,52 +30,74 @@
 #define TEST 0
 #endif
 
+// Wi-Fi Guard Channel Hopping Table (Inter-Band low interference channels)
+static const uint8_t RADIO_CHANNELS[] = {4, 28, 54, 78, 82};
+static const uint8_t RADIO_CHANNEL_COUNT = sizeof(RADIO_CHANNELS) / sizeof(RADIO_CHANNELS[0]);
+
+// Logical Node IDs for Black Channel safety
+#define NODE_ID_RECEIVER    0x0001
+#define NODE_ID_TRANSMITTER 0x0002
+#define DEFAULT_SESSION_ID  0x1234
+
+// RF24 5-Byte Pipe Addresses
+static const uint8_t RF24_PIPE_RX[5] = {'S', 'F', '0', '0', '1'};
+static const uint8_t RF24_PIPE_TX[5] = {'S', 'F', '0', '0', '2'};
+
 // Battery Voltage Input
-// NOTE: A0 is shared with GLCD_COMM_EN. When TEST=1, GLCD is not used so A0 is free for battery.
-// When TEST=0, GLCD and battery share A0 - this is a hardware conflict that requires rewiring.
-// See KNOWN_ISSUES.md for details on resolving this.
 #define BATTERY_INPUT_PIN A0
-#define VOLTAGE_DIVIDER_COEFFICIENT 0.3
-#define BATTERY_FULL_VOLTAGE 12
-#define BATTERY_EMPTY_VOLTAGE 10
+#define VOLTAGE_DIVIDER_COEFFICIENT 0.3f
+#define BATTERY_FULL_VOLTAGE 12.0f
+#define BATTERY_EMPTY_VOLTAGE 10.0f
 
-// Device Addresses Enumeration
-enum device_addresses_enum
+// 5x3 Button Matrix Pins (15 buttons total)
+#define MATRIX_ROW_1 2
+#define MATRIX_ROW_2 3
+#define MATRIX_ROW_3 4
+#define MATRIX_ROW_4 5
+#define MATRIX_ROW_5 6
+#define MATRIX_COL_1 7
+#define MATRIX_COL_2 A1
+#define MATRIX_COL_3 A2
+
+// Button bitmasks for 15-button matrix (16-bit uint16_t)
+typedef enum buttons_enum
 {
-    DEVICE_MASTER = 0,
-    DEVICE_TS_SLAVE = 1
-};
+    // Register (4 buttons)
+    BUTTON_REGISTER_AVANTI     = 0x0001,
+    BUTTON_REGISTER_INDIETRO   = 0x0002,
+    BUTTON_REGISTER_ABTERIORE  = 0x0004,
+    BUTTON_REGISTER_POSTERIORE = 0x0008,
 
-// Device Addresses
-const uint8_t addresses[][4] = {"RX0", "TS1"};
+    // Anilox (4 buttons)
+    BUTTON_ANILOX_AV_ANTERIORE = 0x0010,
+    BUTTON_ANILOX_IN_ANTERIORE = 0x0020,
+    BUTTON_ANILOX_AV_POSTERIORE= 0x0040,
+    BUTTON_ANILOX_IN_POSTERIORE= 0x0080,
 
-// Transaction Unit Command Byte
-typedef enum commands_enum
-{
-    COMM_NOTHING = 0,
-    COMM_START_TX = 1,
-    COMM_BUTTON = 2,
-    COMM_STOP_TX = 4,
-    COMM_DATA = 8,
-    COMM_ACK = 16
-} commands_enum;
+    // Cliche (4 buttons)
+    BUTTON_CLICHE_AV_ANTERIORE = 0x0100,
+    BUTTON_CLICHE_IN_ANTERIORE = 0x0200,
+    BUTTON_CLICHE_AV_POSTERIORE= 0x0400,
+    BUTTON_CLICHE_IN_POSTERIORE= 0x0800,
+
+    // Color (3 buttons)
+    BUTTON_COLOR_ATTACCO       = 0x1000,
+    BUTTON_COLOR_STACCO        = 0x2000,
+    BUTTON_COLOR_COLORE        = 0x4000,
+
+    // Emergency stop flag
+    BUTTON_ESTOP_ACTIVE        = 0x8000
+} buttons_enum;
 
 typedef enum ts_status
 {
     TS_STAT_OFF = 0,
     TS_STAT_ON = 1,
-    TS_STAT_BATTERYLOW = 2
+    TS_STAT_BATTERYLOW = 2,
+    TS_STAT_FAULT = 3
 } ts_status;
-
-// Transaction Unit
-typedef struct transaction_unit
-{
-    uint8_t command;
-    uint8_t buttons;
-    uint8_t active_unit;
-} transaction_unit;
 
 float mapfloat(float x, long in_min, long in_max, long out_min, long out_max);
 int mapint(float x, long in_min, long in_max, long out_min, long out_max);
 
-#endif
+#endif // _H_HEADER

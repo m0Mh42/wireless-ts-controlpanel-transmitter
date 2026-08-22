@@ -1,96 +1,95 @@
-# wireless-ts-controlpanel-transmitter
+# UTECO Wireless Control Panel — Transmitter Firmware
 
-Firmware for the **transmitter** of the wireless handheld control panel.
-It runs on an Arduino UNO (ATmega328P) and uses an nRF24L01+ radio to communicate
-with the master receiver. The transmitter reads its keypad, shows status on a
-graphic LCD, monitors its battery, and exchanges button/state data with the master.
+Industrial safety firmware for the **handheld pendant transmitter** of the UTECO flexographic printing press wireless control system. It runs on an ATmega328P (Arduino Uno) and implements the **EN 50159 / IEC 61784-3 Black Channel Safety Protocol** over an nRF24L01+ 2.4 GHz transceiver.
 
-## Features
+---
 
-- **2.4 GHz radio link** via nRF24L01+ (RF24 library) with auto-ack and retries
-- **Button input** through a TM1638 module (TM16xx library)
-- **Graphic LCD status screen** (U8glib) showing active unit, battery, link, and status
-- **Battery monitoring** with a voltage divider on an analog pin
-- **Error handling** for transmit failures and lost communication
-- Optional **debug** and **test** build modes
+## Safety Architecture (EN 50159 / IEC 61784-3)
 
-## Hardware
+- **Black Channel Layer**: Strict message authentication, sequencing, CRC checking, and dual-rail validation in application code.
+- **Deterministic Transmission Loop**: 20 ms cyclic period (50 Hz rate).
+- **IEEE 802.3 CRC-32**: Cryptographic 32-bit polynomial (`0xEDB88320`) guarding every 32-byte frame.
+- **Flash ROM CRC Optimization**: Table stored in `PROGMEM` (`pgm_read_dword`), conserving **1,024 bytes (50%) of RAM** on the ATmega328P.
+- **Dual-Rail Encoding**: 16-bit button mask (`buttons_primary`) paired with bitwise inverted `buttons_complement` (`~buttons_primary`).
+- **Monotonic Sequencing**: 32-bit incrementing sequence number defending against packet replay and stale commands.
+- **Frequency Agility**: Automatically hops to the next Wi-Fi guard channel if 5 consecutive frames fail to receive an acknowledgement (100 ms threshold).
 
-### nRF24L01+ wiring
+---
 
-| Module | Arduino UNO | ESP32 | ESP8266 |
-|--------|-------------|-------|---------|
-| GND    | GND         | GND   | GND     |
-| Vcc    | 3.3V (ext.) | 3.3V  | 3.3V    |
-| CE     | D9          | D4    | D4      |
-| CSN    | D10         | D5    | D8      |
-| CLK    | D13         | D18   | D5      |
-| MOSI   | D11         | D23   | D7      |
-| MISO   | D12         | D19   | D6      |
+## Hardware Pinout & Wiring (ATmega328P / Arduino Uno)
 
-The radio operates on `CHANNEL 42` (configurable via build flag), `RF24_250KBPS`,
-and `RF24_PA_MAX`. The transmitter writes to the master address (`RX0`) and listens
-on its own address (`TS1`).
+### 1. nRF24L01+ Radio Interface
+| Signal | Arduino Uno Pin | Description |
+| :--- | :--- | :--- |
+| **VCC** | 3.3V (Ext. Filtered) | 3.3V DC Power with 10µF + 100nF decoupling |
+| **GND** | GND | Common Ground |
+| **CE** | D9 | Chip Enable |
+| **CSN** | D10 | SPI Chip Select Not |
+| **SCK** | D13 | SPI Clock |
+| **MOSI** | D11 | Master Out Slave In |
+| **MISO** | D12 | Master In Slave Out |
 
-### Battery sensing
+### 2. 15-Button Matrix Keypad (5 Rows x 3 Columns)
+| Signal | Pin | Mode | Description |
+| :--- | :--- | :--- | :--- |
+| `MATRIX_ROW_1` | D2 | Output (Driven LOW during scan) | Keypad Row 1 (Buttons 0..2) |
+| `MATRIX_ROW_2` | D3 | Output (Driven LOW during scan) | Keypad Row 2 (Buttons 3..5) |
+| `MATRIX_ROW_3` | D4 | Output (Driven LOW during scan) | Keypad Row 3 (Buttons 6..8) |
+| `MATRIX_ROW_4` | D5 | Output (Driven LOW during scan) | Keypad Row 4 (Buttons 9..11) |
+| `MATRIX_ROW_5` | D6 | Output (Driven LOW during scan) | Keypad Row 5 (Buttons 12..14) |
+| `MATRIX_COL_1` | D7 | Input Pullup | Keypad Column 1 |
+| `MATRIX_COL_2` | A1 (Pin 15) | Input Pullup | Keypad Column 2 |
+| `MATRIX_COL_3` | A2 (Pin 16) | Input Pullup | Keypad Column 3 |
 
-Battery voltage is read on `A0` through a voltage divider. Charge is mapped between
-`BATTERY_EMPTY_VOLTAGE` (10 V) and `BATTERY_FULL_VOLTAGE` (12 V).
+### 3. TM1638 7-Segment Display Module
+| Signal | Pin | Description |
+| :--- | :--- | :--- |
+| `DISPLAY_TM1638_DIO_PIN` | D8 | Data Input/Output |
+| `DISPLAY_TM1638_CLK_PIN` | A4 (Pin 18) | Clock Line |
+| `DISPLAY_TM1638_STB_PIN` | A5 (Pin 19) | Strobe Line |
 
-> **Note:** `A0` is shared between the GLCD enable line and the battery input. With
-> `TEST=0`, this is a hardware conflict that requires rewiring (see source comments
-> in `src/header.h`).
+### 4. Battery Voltage Sensing
+| Signal | Pin | Description |
+| :--- | :--- | :--- |
+| `BATTERY_INPUT_PIN` | A0 (Pin 14) | Analog ADC input via resistive voltage divider (Ratio = 0.2857) |
 
-## Project layout
+---
 
-```
-src/
-  main.cpp      Setup and main loop
-  radio.cpp     nRF24L01+ setup, transmit, and read helpers
-  buttons.cpp   TM1638 button scanning
-  glcd.cpp      Graphic LCD status screen
-  battery.cpp   Battery charge measurement
-  error.cpp     Error flags and handling
-  header.h      Pins, addresses, command/status enums, transaction_unit struct
-lib/            Vendored libraries (RF24, TM16xx, U8glib)
-test/           Unity tests and hardware mocks
-```
+## 15-Button Matrix Mapping
 
-## Building
+| Button Index | Bitmask Constant | Hex Mask | Function |
+| :--- | :--- | :--- | :--- |
+| **0** | `BUTTON_REGISTER_AVANTI` | `0x0001` | Register Advance |
+| **1** | `BUTTON_REGISTER_INDIETRO` | `0x0002` | Register Retract |
+| **2** | `BUTTON_REGISTER_ABTERIORE` | `0x0004` | Register Anterior / Offset |
+| **3** | `BUTTON_REGISTER_POSTERIORE` | `0x0008` | Register Posterior |
+| **4** | `BUTTON_ANILOX_AV_ANTERIORE` | `0x0010` | Anilox Advance Anterior |
+| **5** | `BUTTON_ANILOX_IN_ANTERIORE` | `0x0020` | Anilox Retract Anterior |
+| **6** | `BUTTON_ANILOX_AV_POSTERIORE` | `0x0040` | Anilox Advance Posterior |
+| **7** | `BUTTON_ANILOX_IN_POSTERIORE` | `0x0080` | Anilox Retract Posterior |
+| **8** | `BUTTON_CLICHE_AV_ANTERIORE` | `0x0100` | Cliche Advance Anterior |
+| **9** | `BUTTON_CLICHE_IN_ANTERIORE` | `0x0200` | Cliche Retract Anterior |
+| **10** | `BUTTON_CLICHE_AV_POSTERIORE` | `0x0400` | Cliche Advance Posterior |
+| **11** | `BUTTON_CLICHE_IN_POSTERIORE` | `0x0800` | Cliche Retract Posterior |
+| **12** | `BUTTON_COLOR_ATTACCO` | `0x1000` | Color Engage (Attacco) |
+| **13** | `BUTTON_COLOR_STACCO` | `0x2000` | Color Disengage (Stacco) |
+| **14** | `BUTTON_COLOR_COLORE` | `0x4000` | Color Wash / Pump |
 
-This is a [PlatformIO](https://platformio.org/) project. Available environments:
+---
 
-| Environment  | Description |
-|--------------|-------------|
-| `uno`        | Production build for Arduino UNO (`DEBUG=0`, `TEST=0`) |
-| `uno-debug`  | UNO build with serial debug and test mode (`DEBUG=1`, `TEST=1`) |
-| `native`     | Host build for running unit tests with Unity |
-
-Build and upload:
+## Build, Upload & Test
 
 ```sh
+# Run native unit tests on host (21/21 tests)
+pio test -e native
+
+# Compile production firmware for Arduino Uno
+pio run -e uno
+
+# Upload to Arduino Uno
 pio run -e uno -t upload
 ```
 
-Run the unit tests on the host:
-
-```sh
-pio test -e native
-```
-
-## Communication protocol
-
-Each message is a `transaction_unit` (3 bytes): a `command`, the `buttons` bitmask,
-and the `active_unit`. Commands are defined in `src/header.h`:
-
-| Command         | Meaning |
-|-----------------|---------|
-| `COMM_NOTHING`  | No operation |
-| `COMM_START_TX` | Start transmission |
-| `COMM_BUTTON`   | Button state update |
-| `COMM_STOP_TX`  | Stop transmission |
-| `COMM_DATA`     | Data from master (carries active unit) |
-| `COMM_ACK`      | Acknowledgement |
-
-In the main loop the transmitter sends button presses to the master, reads incoming
-data to track the active unit, updates the battery/status, and refreshes the display.
+### Memory Footprint (ATmega328P)
+- **RAM**: 237 bytes / 2048 bytes (**11.6% utilized**, 1.8 KB free)
+- **Flash ROM**: 9,304 bytes / 32,256 bytes (**28.8% utilized**)

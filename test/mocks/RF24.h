@@ -26,8 +26,10 @@ extern uint8_t  mock_rf24_retries_delay;
 extern uint8_t  mock_rf24_retries_count;
 extern uint8_t  mock_rf24_data_rate;
 extern uint8_t  mock_rf24_payload_size;
+extern bool     mock_rf24_listening;
+extern uint8_t  mock_rf24_address_width;
 
-#define MOCK_RF24_BUF_SIZE 32
+#define MOCK_RF24_BUF_SIZE 64
 extern uint8_t  mock_rf24_tx_buf[MOCK_RF24_BUF_SIZE];
 extern uint8_t  mock_rf24_tx_len;
 extern uint8_t  mock_rf24_rx_buf[MOCK_RF24_BUF_SIZE];
@@ -38,6 +40,7 @@ public:
     RF24(uint8_t ce_pin, uint8_t csn_pin) {}
 
     void begin() { mock_rf24_begin_called = true; }
+    void setAddressWidth(uint8_t width) { mock_rf24_address_width = width; }
     void openWritingPipe(const uint8_t* addr) { mock_rf24_write_addr = addr; }
     void openReadingPipe(uint8_t num, const uint8_t* addr) {
         mock_rf24_read_pipe_number = num;
@@ -52,6 +55,8 @@ public:
     }
     void setDataRate(uint8_t rate) { mock_rf24_data_rate = rate; }
     void setPayloadSize(uint8_t size) { mock_rf24_payload_size = size; }
+    void startListening() { mock_rf24_listening = true; }
+    void stopListening() { mock_rf24_listening = false; }
     bool isChipConnected() { return mock_rf24_chip_connected; }
 
     bool write(const void* buf, uint8_t len) {
