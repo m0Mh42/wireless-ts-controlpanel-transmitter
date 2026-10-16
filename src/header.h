@@ -2,11 +2,21 @@
 #define _H_HEADER 1
 
 #include <Arduino.h>
-#include "safety_protocol.h"
+#include "protocol.h"
+
+// Default RF Power Level: RF24_PA_MAX for maximum distance across industrial halls
+#ifndef RF24_PA_LEVEL_DEFAULT
+#define RF24_PA_LEVEL_DEFAULT RF24_PA_MAX
+#endif
+
+// Default On-Air Data Rate: RF24_1MBPS for standard robust turnaround, or RF24_250KBPS for maximum sensitivity
+#ifndef RF24_DATARATE_DEFAULT
+#define RF24_DATARATE_DEFAULT RF24_1MBPS
+#endif
 
 #if defined(__AVR_ATmega328P__) || defined(__AVR_ATmega328PB__) || defined(__AVR_ATmega2560__) || defined(__AVR_ATmega1280__)
 #define CSN_PIN 10
-#define CE_PIN 9
+#define CE_PIN A0
 #elif defined(ESP32)
 #define CSN_PIN 5
 #define CE_PIN 4
@@ -15,9 +25,14 @@
 #define CE_PIN D4
 #else
 #define CSN_PIN 10
-#define CE_PIN 9
+#define CE_PIN A0
 #endif
 
+#ifndef RF24_SPI_SPEED
+#define RF24_SPI_SPEED 2000000UL // 2 MHz SPI clock
+#endif
+
+// Guard Channel outside standard Wi-Fi
 #ifndef CHANNEL
 #define CHANNEL 78
 #endif
@@ -30,34 +45,31 @@
 #define TEST 0
 #endif
 
-// Wi-Fi Guard Channel Hopping Table (Inter-Band low interference channels)
-static const uint8_t RADIO_CHANNELS[] = {4, 28, 54, 78, 82};
-static const uint8_t RADIO_CHANNEL_COUNT = sizeof(RADIO_CHANNELS) / sizeof(RADIO_CHANNELS[0]);
+// Safety Watchdog & Cycle Timings
+#define SAFETY_WATCHDOG_TIMEOUT_MS 150UL
+#define TX_CYCLE_PERIOD_MS 20UL
+#define TELEMETRY_WAIT_TIMEOUT_MS 25UL // Headroom for clone chips, receiver display refresh, and PA/LNA settling
 
-// Logical Node IDs for Black Channel safety
-#define NODE_ID_RECEIVER    0x0001
-#define NODE_ID_TRANSMITTER 0x0002
-#define DEFAULT_SESSION_ID  0x1234
+// RF24 5-Byte Pipe Addresses (Pipes 1..5 share top 4 bytes per Nordic MultiCeiver spec)
+static const uint8_t RF24_PIPE_CONTROL[5]   = {'S', 'A', 'F', 'E', '1'}; // Transmitter -> Receiver
+static const uint8_t RF24_PIPE_TELEMETRY[5] = {'S', 'A', 'F', 'E', '2'}; // Receiver -> Transmitter
+static const uint8_t RF24_SAFETY_PIPE[5]    = {'S', 'A', 'F', 'E', '1'}; // Legacy alias
 
-// RF24 5-Byte Pipe Addresses
-static const uint8_t RF24_PIPE_RX[5] = {'S', 'F', '0', '0', '1'};
-static const uint8_t RF24_PIPE_TX[5] = {'S', 'F', '0', '0', '2'};
-
-// Battery Voltage Input
-#define BATTERY_INPUT_PIN A0
+// Battery Voltage Input (Transmitter.NET: R1.2/R2.2 -> U2.A3)
+#define BATTERY_INPUT_PIN A3
 #define VOLTAGE_DIVIDER_COEFFICIENT 0.3f
 #define BATTERY_FULL_VOLTAGE 12.0f
 #define BATTERY_EMPTY_VOLTAGE 10.0f
 
-// 5x3 Button Matrix Pins (15 buttons total)
-#define MATRIX_ROW_1 2
-#define MATRIX_ROW_2 3
-#define MATRIX_ROW_3 4
-#define MATRIX_ROW_4 5
-#define MATRIX_ROW_5 6
-#define MATRIX_COL_1 7
-#define MATRIX_COL_2 A1
-#define MATRIX_COL_3 A2
+// 5x3 Button Matrix Pins (Transmitter.NET Connector P4: D5..D9 and A1, A4, A5)
+#define MATRIX_ROW_1 5
+#define MATRIX_ROW_2 6
+#define MATRIX_ROW_3 7
+#define MATRIX_ROW_4 8
+#define MATRIX_ROW_5 9
+#define MATRIX_COL_1 A1
+#define MATRIX_COL_2 A4
+#define MATRIX_COL_3 A5
 
 // Button bitmasks for 15-button matrix (16-bit uint16_t)
 typedef enum buttons_enum

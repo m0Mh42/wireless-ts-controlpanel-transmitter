@@ -5,6 +5,9 @@ static const uint8_t col_pins[3] = {MATRIX_COL_1, MATRIX_COL_2, MATRIX_COL_3};
 
 void buttons_begin()
 {
+    pinMode(LED_BUILTIN, OUTPUT);
+    digitalWrite(LED_BUILTIN, LOW);
+
     for (int i = 0; i < 5; i++) {
         pinMode(row_pins[i], OUTPUT);
         digitalWrite(row_pins[i], HIGH);

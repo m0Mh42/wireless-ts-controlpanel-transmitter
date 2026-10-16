@@ -11,8 +11,9 @@ Industrial safety firmware for the **handheld pendant transmitter** of the UTECO
 - **IEEE 802.3 CRC-32**: Cryptographic 32-bit polynomial (`0xEDB88320`) guarding every 32-byte frame.
 - **Flash ROM CRC Optimization**: Table stored in `PROGMEM` (`pgm_read_dword`), conserving **1,024 bytes (50%) of RAM** on the ATmega328P.
 - **Dual-Rail Encoding**: 16-bit button mask (`buttons_primary`) paired with bitwise inverted `buttons_complement` (`~buttons_primary`).
-- **Monotonic Sequencing**: 32-bit incrementing sequence number defending against packet replay and stale commands.
-- **Frequency Agility**: Automatically hops to the next Wi-Fi guard channel if 5 consecutive frames fail to receive an acknowledgement (100 ms threshold).
+- **Monotonic Sequencing & Resync**: Sequence numbers increment monotonically; automatic resynchronization allows immediate reconnection whenever powered on in any sequence.
+- **High-Power RF Transmission**: Default `RF24_PA_MAX` (+20 dBm on PA+LNA modules) for maximum coverage across plant distances.
+- **Pinned Guard Channel**: Fixed on Channel 78 (2478 MHz) in the upper Wi-Fi guard band.
 
 ---
 
@@ -80,16 +81,19 @@ Industrial safety firmware for the **handheld pendant transmitter** of the UTECO
 ## Build, Upload & Test
 
 ```sh
-# Run native unit tests on host (21/21 tests)
+# Run native unit tests on host (35/35 tests)
 pio test -e native
 
-# Compile production firmware for Arduino Uno
+# Compile production firmware for Arduino Uno (ACK payload mode)
 pio run -e uno
+
+# Compile production firmware for Arduino Uno (Ping-Pong mode)
+pio run -e uno-pingpong
 
 # Upload to Arduino Uno
 pio run -e uno -t upload
 ```
 
 ### Memory Footprint (ATmega328P)
-- **RAM**: 237 bytes / 2048 bytes (**11.6% utilized**, 1.8 KB free)
-- **Flash ROM**: 9,304 bytes / 32,256 bytes (**28.8% utilized**)
+- **RAM**: 411 bytes / 2048 bytes (**20.1% utilized**, 1.63 KB free)
+- **Flash ROM**: 12,084 bytes / 30,720 bytes (**39.3% utilized**)

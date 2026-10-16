@@ -40,7 +40,9 @@ extern "C" {
     void digitalWrite(uint8_t pin, uint8_t value);
     void pinMode(uint8_t pin, uint8_t mode);
     unsigned long millis(void);
+    unsigned long micros(void);
     void delay(unsigned long ms);
+    void delayMicroseconds(unsigned int us);
     int analogRead(uint8_t pin);
 #ifdef __cplusplus
 }
@@ -63,6 +65,7 @@ extern HardwareSerial Serial;
 
 // AVR pgmspace compatibility for native
 #define PROGMEM
+#define F(str) str
 #define pgm_read_byte(addr) (*(const unsigned char *)(addr))
 #define pgm_read_word(addr) (*(const unsigned short *)(addr))
 #define strcpy_P(dest, src) strcpy((dest), (src))

@@ -58,15 +58,5 @@ void error_update_led()
 
 void transaction_error_handling()
 {
-    if (error_state != ERROR_NONE && error_counter > 0)
-    {
-        if (DEBUG)
-        {
-            Serial.print("ERR: state=");
-            Serial.print((int)error_state);
-            Serial.print(" count=");
-            Serial.println(error_counter);
-        }
-    }
     error_update_led();
 }

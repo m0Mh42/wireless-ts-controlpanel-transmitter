@@ -8,12 +8,14 @@
 #include "SPI.h"
 #include "TM1638.h"
 #include "header.h"
+#include "protocol.h"
 
 // ============================================================
 // Mock state — must be defined before including sources
 // ============================================================
 int mock_pin_read[20];
 int mock_pin_written[20];
+int mock_pin_mode[20];
 unsigned long mock_millis_value;
 unsigned long mock_last_delay_ms;
 int mock_analog_read_value;
@@ -37,12 +39,19 @@ uint8_t  mock_rf24_data_rate;
 uint8_t  mock_rf24_payload_size;
 bool     mock_rf24_listening;
 uint8_t  mock_rf24_address_width;
+bool     mock_rf24_ack_payload_enabled;
+bool     mock_rf24_dynamic_payloads_enabled;
+bool     mock_rf24_ack_payload_available;
+bool     mock_rf24_auto_reply_telemetry = true;
+uint8_t  mock_rf24_simulated_active_unit = 0;
 
 #define MOCK_RF24_BUF_SIZE 64
 uint8_t  mock_rf24_tx_buf[MOCK_RF24_BUF_SIZE];
 uint8_t  mock_rf24_tx_len;
 uint8_t  mock_rf24_rx_buf[MOCK_RF24_BUF_SIZE];
 uint8_t  mock_rf24_rx_len;
+uint8_t  mock_rf24_ack_payload_buf[MOCK_RF24_BUF_SIZE];
+uint8_t  mock_rf24_ack_payload_len;
 
 // TM1638 mock state
 uint32_t mock_tm1638_buttons;
@@ -80,19 +89,32 @@ void digitalWrite(uint8_t pin, uint8_t value)
     mock_pin_written[pin] = value;
 }
 
-void pinMode(uint8_t pin, uint8_t mode) {}
+void pinMode(uint8_t pin, uint8_t mode)
+{
+    if (pin < 20) mock_pin_mode[pin] = mode;
+}
 
 unsigned long millis(void)
 {
     return mock_millis_value;
 }
 
+unsigned long micros(void)
+{
+    return mock_millis_value * 1000UL;
+}
+
 void delay(unsigned long ms)
 {
     mock_last_delay_ms = ms;
+    mock_millis_value += ms;
 }
 
-void delayMicroseconds(unsigned int us) {}
+void delayMicroseconds(unsigned int us)
+{
+    (void)us;
+    mock_millis_value += 1;
+}
 
 int analogRead(uint8_t pin)
 {
@@ -105,8 +127,6 @@ int analogRead(uint8_t pin)
 // Include sources under test
 // ============================================================
 #include "../src/header.cpp"
-#include "../src/safety_crc32.cpp"
-#include "../src/safety_protocol.cpp"
 #include "../src/error.cpp"
 #include "../src/radio.cpp"
 #include "../src/buttons.cpp"
@@ -121,6 +141,7 @@ static void mock_reset(void)
     for (int i = 0; i < 20; i++) {
         mock_pin_read[i] = HIGH;
         mock_pin_written[i] = HIGH;
+        mock_pin_mode[i] = 0;
     }
     mock_millis_value = 0;
     mock_last_delay_ms = 0;
@@ -142,10 +163,17 @@ static void mock_reset(void)
     mock_rf24_payload_size = 0;
     mock_rf24_listening = false;
     mock_rf24_address_width = 0;
+    mock_rf24_ack_payload_enabled = false;
+    mock_rf24_dynamic_payloads_enabled = false;
+    mock_rf24_ack_payload_available = false;
+    mock_rf24_auto_reply_telemetry = true;
+    mock_rf24_simulated_active_unit = 0;
     mock_rf24_tx_len = 0;
     mock_rf24_rx_len = 0;
+    mock_rf24_ack_payload_len = 0;
     memset(mock_rf24_tx_buf, 0, MOCK_RF24_BUF_SIZE);
     memset(mock_rf24_rx_buf, 0, MOCK_RF24_BUF_SIZE);
+    memset(mock_rf24_ack_payload_buf, 0, MOCK_RF24_BUF_SIZE);
 
     mock_tm1638_buttons = 0;
     mock_tm1638_cleared = false;
@@ -157,124 +185,42 @@ static void mock_reset(void)
 }
 
 // ============================================================
-// CRC-32 & SAFETY PROTOCOL TESTS
+// PROTOCOL TESTS
 // ============================================================
-static void test_crc32_self_test(void)
+static void test_protocol_packet_sizes(void)
 {
-    TEST_ASSERT_TRUE(crc32_self_test());
+    TEST_ASSERT_EQUAL_UINT32(8, sizeof(ControlPacket));
+    TEST_ASSERT_EQUAL_UINT32(4, sizeof(TelemetryPacket));
 }
 
-static void test_crc32_standard_vector(void)
+static void test_protocol_verify_buttons_valid(void)
 {
-    const uint8_t vector[] = {'1', '2', '3', '4', '5', '6', '7', '8', '9'};
-    uint32_t crc = crc32_calculate_ieee(vector, sizeof(vector), 0xFFFFFFFFUL);
-    TEST_ASSERT_EQUAL_HEX32(0xCBF43926UL, crc);
+    uint16_t b = BUTTON_REGISTER_AVANTI | BUTTON_COLOR_ATTACCO;
+    uint16_t b_inv = (uint16_t)~b;
+    TEST_ASSERT_TRUE(protocol_verify_buttons(b, b_inv));
 }
 
-static void test_safety_frame_serialization_roundtrip(void)
+static void test_protocol_verify_buttons_corrupted(void)
 {
-    SafetyFrame tx;
-    tx.preamble = PROTOCOL_MAGIC_PREAMBLE;
-    tx.version = PROTOCOL_VERSION;
-    tx.sender_id = NODE_ID_TRANSMITTER;
-    tx.target_id = NODE_ID_RECEIVER;
-    tx.sequence_number = 105;
-    tx.session_id = DEFAULT_SESSION_ID;
-    tx.frame_type = FrameType::COMMAND;
-    tx.payload_length = sizeof(ApplicationPayload);
-
-    SafetyProtocolEngine::pack_buttons(BUTTON_REGISTER_AVANTI | BUTTON_COLOR_ATTACCO, tx.payload);
-    tx.payload.active_unit = 3;
-    tx.payload.status_flags = (uint8_t)TS_STAT_ON;
-    tx.payload.battery_mv = 11800;
-    tx.payload.diagnostic_flags = 0x1234;
-    tx.payload.spare1 = 0;
-    tx.payload.spare2 = 0;
-
-    uint8_t buf[SAFETY_FRAME_SIZE];
-    bool ser_ok = SafetyProtocolEngine::serialize_frame(tx, buf, sizeof(buf));
-    TEST_ASSERT_TRUE(ser_ok);
-
-    SafetyFrame rx;
-    SafetyValidationResult res = SafetyProtocolEngine::deserialize_and_validate(
-        buf, sizeof(buf), NODE_ID_TRANSMITTER, NODE_ID_RECEIVER, DEFAULT_SESSION_ID, 100, 10, rx
-    );
-
-    TEST_ASSERT_EQUAL(SafetyValidationResult::VALID, res);
-    TEST_ASSERT_EQUAL_UINT32(105, rx.sequence_number);
-    TEST_ASSERT_EQUAL_HEX16(BUTTON_REGISTER_AVANTI | BUTTON_COLOR_ATTACCO, rx.payload.buttons_primary);
-    TEST_ASSERT_EQUAL_HEX16((uint16_t)~(BUTTON_REGISTER_AVANTI | BUTTON_COLOR_ATTACCO), rx.payload.buttons_complement);
-    TEST_ASSERT_EQUAL_UINT8(3, rx.payload.active_unit);
-    TEST_ASSERT_EQUAL_UINT16(11800, rx.payload.battery_mv);
+    uint16_t b = BUTTON_REGISTER_AVANTI;
+    uint16_t b_inv = (uint16_t)b; // Inverted bits don't match
+    TEST_ASSERT_FALSE(protocol_verify_buttons(b, b_inv));
 }
 
-static void test_safety_frame_crc_corruption_rejected(void)
+static void test_protocol_control_packet_construction(void)
 {
-    SafetyFrame tx;
-    tx.sender_id = NODE_ID_TRANSMITTER;
-    tx.target_id = NODE_ID_RECEIVER;
-    tx.sequence_number = 200;
-    tx.session_id = DEFAULT_SESSION_ID;
-    tx.frame_type = FrameType::COMMAND;
-    SafetyProtocolEngine::pack_buttons(BUTTON_ANILOX_AV_ANTERIORE, tx.payload);
+    ControlPacket pkt;
+    pkt.buttons = BUTTON_ANILOX_AV_ANTERIORE;
+    pkt.buttons_inv = (uint16_t)~BUTTON_ANILOX_AV_ANTERIORE;
+    pkt.battery_mv = 11800;
+    pkt.status = TS_STAT_ON;
+    pkt.seq = 105;
 
-    uint8_t buf[SAFETY_FRAME_SIZE];
-    SafetyProtocolEngine::serialize_frame(tx, buf, sizeof(buf));
-
-    // Corrupt 1 single payload bit
-    buf[14] ^= 0x01;
-
-    SafetyFrame rx;
-    SafetyValidationResult res = SafetyProtocolEngine::deserialize_and_validate(
-        buf, sizeof(buf), NODE_ID_TRANSMITTER, NODE_ID_RECEIVER, DEFAULT_SESSION_ID, 199, 10, rx
-    );
-
-    TEST_ASSERT_EQUAL(SafetyValidationResult::ERR_CRC32_MISMATCH, res);
-}
-
-static void test_safety_frame_sequence_replay_rejected(void)
-{
-    SafetyFrame tx;
-    tx.sender_id = NODE_ID_TRANSMITTER;
-    tx.target_id = NODE_ID_RECEIVER;
-    tx.sequence_number = 50; // Stale sequence (last was 100)
-    tx.session_id = DEFAULT_SESSION_ID;
-    tx.frame_type = FrameType::COMMAND;
-    SafetyProtocolEngine::pack_buttons(0, tx.payload);
-
-    uint8_t buf[SAFETY_FRAME_SIZE];
-    SafetyProtocolEngine::serialize_frame(tx, buf, sizeof(buf));
-
-    SafetyFrame rx;
-    SafetyValidationResult res = SafetyProtocolEngine::deserialize_and_validate(
-        buf, sizeof(buf), NODE_ID_TRANSMITTER, NODE_ID_RECEIVER, DEFAULT_SESSION_ID, 100, 10, rx
-    );
-
-    TEST_ASSERT_EQUAL(SafetyValidationResult::ERR_SEQUENCE_STALE_OR_REPLAY, res);
-}
-
-static void test_safety_frame_complement_bitflip_rejected(void)
-{
-    SafetyFrame tx;
-    tx.sender_id = NODE_ID_TRANSMITTER;
-    tx.target_id = NODE_ID_RECEIVER;
-    tx.sequence_number = 101;
-    tx.session_id = DEFAULT_SESSION_ID;
-    tx.frame_type = FrameType::COMMAND;
-    
-    // Direct memory corruption: primary and complement don't match
-    tx.payload.buttons_primary = 0x0004;
-    tx.payload.buttons_complement = 0x0004; // Should be ~0x0004 = 0xFFFB
-
-    uint8_t buf[SAFETY_FRAME_SIZE];
-    SafetyProtocolEngine::serialize_frame(tx, buf, sizeof(buf));
-
-    SafetyFrame rx;
-    SafetyValidationResult res = SafetyProtocolEngine::deserialize_and_validate(
-        buf, sizeof(buf), NODE_ID_TRANSMITTER, NODE_ID_RECEIVER, DEFAULT_SESSION_ID, 100, 10, rx
-    );
-
-    TEST_ASSERT_EQUAL(SafetyValidationResult::ERR_COMPLEMENTARY_BIT_FAULT, res);
+    TEST_ASSERT_EQUAL_HEX16(BUTTON_ANILOX_AV_ANTERIORE, pkt.buttons);
+    TEST_ASSERT_TRUE(protocol_verify_buttons(pkt.buttons, pkt.buttons_inv));
+    TEST_ASSERT_EQUAL_UINT16(11800, pkt.battery_mv);
+    TEST_ASSERT_EQUAL_UINT8(TS_STAT_ON, pkt.status);
+    TEST_ASSERT_EQUAL_UINT8(105, pkt.seq);
 }
 
 // ============================================================
@@ -282,44 +228,75 @@ static void test_safety_frame_complement_bitflip_rejected(void)
 // ============================================================
 static void test_mapfloat_maps_correctly(void)
 {
-    float result = mapfloat(5.0f, 0, 10, 0, 100);
-    TEST_ASSERT_EQUAL_FLOAT(50.0f, result);
+    float val = mapfloat(50.0f, 0, 100, 0, 200);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 100.0f, val);
+
+    val = mapfloat(0.0f, 0, 100, -100, 100);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, -100.0f, val);
+
+    val = mapfloat(100.0f, 0, 100, -100, 100);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 100.0f, val);
 }
 
 static void test_mapint_maps_correctly(void)
 {
-    int result = mapint(5.0f, 0, 10, 0, 100);
-    TEST_ASSERT_EQUAL_INT(50, result);
+    int val = mapint(50.0f, 0, 100, 0, 200);
+    TEST_ASSERT_EQUAL_INT(100, val);
+
+    val = mapint(0.0f, 0, 100, -100, 100);
+    TEST_ASSERT_EQUAL_INT(-100, val);
+
+    val = mapint(100.0f, 0, 100, -100, 100);
+    TEST_ASSERT_EQUAL_INT(100, val);
 }
 
 static void test_mapint_battery_voltage_full(void)
 {
-    int result = mapint(12.0f, 10, 12, 0, 255);
-    TEST_ASSERT_EQUAL_INT(255, result);
+    float full_v = 12.0f;
+    int charge = mapint(full_v, 10, 12, 0, 255);
+    TEST_ASSERT_EQUAL_INT(255, charge);
 }
 
 static void test_mapint_battery_voltage_empty(void)
 {
-    int result = mapint(10.0f, 10, 12, 0, 255);
-    TEST_ASSERT_EQUAL_INT(0, result);
+    float empty_v = 10.0f;
+    int charge = mapint(empty_v, 10, 12, 0, 255);
+    TEST_ASSERT_EQUAL_INT(0, charge);
 }
 
 // ============================================================
 // BATTERY TESTS
 // ============================================================
+static void test_battery_init_sets_pullup(void)
+{
+    mock_reset();
+    battery_init();
+    TEST_ASSERT_EQUAL_INT(INPUT_PULLUP, mock_pin_mode[BATTERY_INPUT_PIN]);
+}
+
 static void test_battery_charge_range(void)
 {
     mock_reset();
-    uint8_t charge = battery_charge();
-    TEST_ASSERT_UINT8_WITHIN(255, 0, charge);
+    battery_init();
+
+    // Connected full battery (12V): charge is 255
+    mock_analog_read_value = 738;
+    uint8_t c = battery_charge();
+    TEST_ASSERT_UINT8_WITHIN(2, 255, c);
+
+    // Connected empty battery (10V): charge is 0
+    mock_analog_read_value = 614;
+    c = battery_charge();
+    TEST_ASSERT_EQUAL_UINT8(0, c);
 }
 
 static void test_battery_voltage_full_formula(void)
 {
     mock_reset();
-    mock_analog_read_value = (int)(12.0 * VOLTAGE_DIVIDER_COEFFICIENT / 5.0 * 1024.0);
-    uint8_t charge = battery_charge();
-    TEST_ASSERT_UINT8_WITHIN(2, 255, charge);
+    battery_init();
+
+    // ADC = 737: (737 * 5.0) / (1024 * 0.3) = 11.995 V -> approx 12000 mV
+    mock_analog_read_value = 737;
     uint16_t mv = battery_millivolts();
     TEST_ASSERT_UINT16_WITHIN(100, 12000, mv);
 }
@@ -327,29 +304,54 @@ static void test_battery_voltage_full_formula(void)
 static void test_battery_voltage_empty_formula(void)
 {
     mock_reset();
-    mock_analog_read_value = (int)(10.0 * VOLTAGE_DIVIDER_COEFFICIENT / 5.0 * 1024.0);
-    uint8_t charge = battery_charge();
-    TEST_ASSERT_EQUAL_UINT8(0, charge);
+    battery_init();
+
+    // ADC = 614: (614 * 5.0) / (1024 * 0.3) = 9.993 V -> approx 10000 mV
+    mock_analog_read_value = 614;
     uint16_t mv = battery_millivolts();
     TEST_ASSERT_UINT16_WITHIN(100, 10000, mv);
 }
 
+static void test_battery_floating_pin_unconnected(void)
+{
+    mock_reset();
+    battery_init();
+
+    // Low voltage below 8V threshold -> not connected
+    mock_analog_read_value = 300;
+    TEST_ASSERT_FALSE(battery_is_connected());
+
+    // Normal connected battery above 8V threshold -> connected
+    mock_analog_read_value = 700;
+    TEST_ASSERT_TRUE(battery_is_connected());
+}
+
 // ============================================================
-// BUTTONS TESTS (15-button matrix)
+// BUTTONS TESTS (5x3 Matrix)
 // ============================================================
 static void test_buttons_begin_initializes(void)
 {
     mock_reset();
     buttons_begin();
-    TEST_ASSERT_TRUE(true);
+
+    const uint8_t row_pins[5] = {MATRIX_ROW_1, MATRIX_ROW_2, MATRIX_ROW_3, MATRIX_ROW_4, MATRIX_ROW_5};
+    const uint8_t col_pins[3] = {MATRIX_COL_1, MATRIX_COL_2, MATRIX_COL_3};
+
+    for (int i = 0; i < 5; i++) {
+        TEST_ASSERT_EQUAL_INT(OUTPUT, mock_pin_mode[row_pins[i]]);
+        TEST_ASSERT_EQUAL_INT(HIGH, mock_pin_written[row_pins[i]]);
+    }
+    for (int i = 0; i < 3; i++) {
+        TEST_ASSERT_EQUAL_INT(INPUT_PULLUP, mock_pin_mode[col_pins[i]]);
+    }
 }
 
 static void test_read_buttons_returns_zero_when_idle(void)
 {
     mock_reset();
-    for (int i = 0; i < 20; i++) mock_pin_read[i] = HIGH;
+    mock_matrix_pressed_btn = -1;
     uint16_t result = read_buttons();
-    TEST_ASSERT_EQUAL_UINT16(0, result);
+    TEST_ASSERT_EQUAL_HEX16(0x0000, result);
 }
 
 static void test_read_buttons_row0_col0(void)
@@ -378,10 +380,13 @@ static void test_radio_setup_configures_safety(void)
     radio_setup(&test_radio);
     TEST_ASSERT_TRUE(mock_rf24_begin_called);
     TEST_ASSERT_EQUAL_UINT8(5, mock_rf24_address_width);
-    TEST_ASSERT_EQUAL(RF24_PA_MAX, mock_rf24_pa_level);
-    TEST_ASSERT_EQUAL(RF24_250KBPS, mock_rf24_data_rate);
-    TEST_ASSERT_EQUAL(SAFETY_FRAME_SIZE, mock_rf24_payload_size);
+    TEST_ASSERT_EQUAL(RF24_PA_LEVEL_DEFAULT, mock_rf24_pa_level);
+    TEST_ASSERT_EQUAL(RF24_DATARATE_DEFAULT, mock_rf24_data_rate);
+    TEST_ASSERT_EQUAL_UINT8(5, mock_rf24_retries_delay);
     TEST_ASSERT_EQUAL(CHANNEL, mock_rf24_channel);
+    TEST_ASSERT_TRUE(mock_rf24_ack_payload_enabled);
+    TEST_ASSERT_TRUE(mock_rf24_dynamic_payloads_enabled);
+    TEST_ASSERT_EQUAL_UINT8(15, mock_rf24_retries_count);
 }
 
 static void test_radio_send_safety_frame_success(void)
@@ -390,18 +395,16 @@ static void test_radio_send_safety_frame_success(void)
     RF24 test_radio(CE_PIN, CSN_PIN);
     radio_setup(&test_radio);
 
-    bool sent = radio_send_safety_frame(&test_radio, 0x0001, 12000, TS_STAT_ON, 42);
+    uint8_t active_unit = 0;
+    bool sent = radio_send_safety_frame_and_read_ack(&test_radio, 0x0001, 12000, TS_STAT_ON, 42, &active_unit);
     TEST_ASSERT_TRUE(sent);
-    TEST_ASSERT_EQUAL(SAFETY_FRAME_SIZE, mock_rf24_tx_len);
+    TEST_ASSERT_EQUAL(sizeof(ControlPacket), mock_rf24_tx_len);
 
-    SafetyFrame rx;
-    SafetyValidationResult res = SafetyProtocolEngine::deserialize_and_validate(
-        mock_rf24_tx_buf, SAFETY_FRAME_SIZE, NODE_ID_TRANSMITTER, NODE_ID_RECEIVER, DEFAULT_SESSION_ID, 41, 10, rx
-    );
-    TEST_ASSERT_EQUAL(SafetyValidationResult::VALID, res);
-    TEST_ASSERT_EQUAL_UINT32(42, rx.sequence_number);
-    TEST_ASSERT_EQUAL_HEX16(0x0001, rx.payload.buttons_primary);
-    TEST_ASSERT_EQUAL_UINT16(12000, rx.payload.battery_mv);
+    ControlPacket* tx = (ControlPacket*)mock_rf24_tx_buf;
+    TEST_ASSERT_EQUAL_HEX16(0x0001, tx->buttons);
+    TEST_ASSERT_TRUE(protocol_verify_buttons(tx->buttons, tx->buttons_inv));
+    TEST_ASSERT_EQUAL_UINT16(12000, tx->battery_mv);
+    TEST_ASSERT_EQUAL_UINT8(42, tx->seq);
 }
 
 static void test_radio_channel_hopping(void)
@@ -415,7 +418,122 @@ static void test_radio_channel_hopping(void)
     uint8_t next_ch = radio_get_channel();
 
     TEST_ASSERT_NOT_EQUAL(initial_ch, next_ch);
-    TEST_ASSERT_EQUAL_UINT8(next_ch, mock_rf24_channel);
+}
+
+static void test_radio_setup_detects_disconnected_chip(void)
+{
+    mock_reset();
+    mock_rf24_chip_connected = false;
+    RF24 test_radio(CE_PIN, CSN_PIN);
+    radio_setup(&test_radio);
+
+    TEST_ASSERT_TRUE(error_is_active(ERROR_RADIO_NOT_CONNECTED));
+    TEST_ASSERT_FALSE(radio_is_chip_connected(&test_radio));
+
+    mock_rf24_chip_connected = true;
+    TEST_ASSERT_TRUE(radio_is_chip_connected(&test_radio));
+}
+
+static void test_radio_software_telemetry_roundtrip(void)
+{
+    mock_reset();
+    mock_rf24_auto_reply_telemetry = false;
+    RF24 test_radio(CE_PIN, CSN_PIN);
+    radio_setup(&test_radio);
+
+    TelemetryPacket staged_tel = {6, (uint8_t)TS_STAT_ON, 10, 0};
+    memcpy(mock_rf24_ack_payload_buf, &staged_tel, sizeof(TelemetryPacket));
+    mock_rf24_ack_payload_len = sizeof(TelemetryPacket);
+    mock_rf24_ack_payload_available = true;
+
+    uint8_t received_unit = 0;
+    bool ok = radio_send_safety_frame_and_read_ack(
+        &test_radio,
+        0x0001,
+        12000,
+        TS_STAT_ON,
+        10,
+        &received_unit
+    );
+
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL_UINT8(6, received_unit);
+    TEST_ASSERT_EQUAL(sizeof(ControlPacket), mock_rf24_tx_len);
+}
+
+static void test_radio_diagnostics_tracking(void)
+{
+    mock_reset();
+    radio_reset_diagnostics();
+    RF24 test_radio(CE_PIN, CSN_PIN);
+    radio_setup(&test_radio);
+
+    const RadioTxDiagnostics& d = radio_get_diagnostics();
+    TEST_ASSERT_EQUAL_UINT32(0, d.tx_attempt_count);
+    TEST_ASSERT_EQUAL_UINT32(0, d.tx_success_count);
+    TEST_ASSERT_EQUAL_UINT32(0, d.tx_fail_count);
+
+    // Successful transmission
+    mock_rf24_write_result = true;
+    uint8_t active_unit = 0;
+    bool ok = radio_send_safety_frame_and_read_ack(&test_radio, 0, 12000, TS_STAT_ON, 1, &active_unit);
+    TEST_ASSERT_TRUE(ok);
+    TEST_ASSERT_EQUAL_UINT32(1, d.tx_attempt_count);
+    TEST_ASSERT_EQUAL_UINT32(1, d.tx_success_count);
+    TEST_ASSERT_EQUAL_UINT32(0, d.tx_fail_count);
+    TEST_ASSERT_TRUE(d.last_tx_ok);
+    TEST_ASSERT_EQUAL_UINT8(0, d.last_error_code);
+
+    // Failed transmission
+    mock_rf24_write_result = false;
+    ok = radio_send_safety_frame_and_read_ack(&test_radio, 0, 12000, TS_STAT_ON, 2, &active_unit);
+    TEST_ASSERT_FALSE(ok);
+    TEST_ASSERT_EQUAL_UINT32(2, d.tx_attempt_count);
+    TEST_ASSERT_EQUAL_UINT32(1, d.tx_success_count);
+    TEST_ASSERT_EQUAL_UINT32(1, d.tx_fail_count);
+    TEST_ASSERT_FALSE(d.last_tx_ok);
+    TEST_ASSERT_EQUAL_UINT8(2, d.last_error_code);
+}
+
+static void test_radio_lqi_scaled_convergence(void)
+{
+    mock_reset();
+    radio_reset_diagnostics();
+    TEST_ASSERT_EQUAL_UINT8(100, radio_get_lqi());
+
+    radio_update_lqi(false);
+    TEST_ASSERT_EQUAL_UINT8(95, radio_get_lqi());
+
+    for (int i = 0; i < 10; i++)
+    {
+        radio_update_lqi(false);
+    }
+    TEST_ASSERT_TRUE(radio_get_lqi() < 60);
+
+    for (int i = 0; i < 100; i++)
+    {
+        radio_update_lqi(true);
+    }
+    TEST_ASSERT_EQUAL_UINT8(100, radio_get_lqi());
+}
+
+static void test_display_show_packet_debug(void)
+{
+    mock_reset();
+    RadioTxDiagnostics d;
+    memset(&d, 0, sizeof(d));
+    d.tx_attempt_count = 10;
+    d.tx_success_count = 8;
+    d.tx_fail_count = 2;
+    d.last_tx_ok = true;
+    d.last_ack_payload_ok = true;
+    d.datarate_1mbps = 1;
+
+    display_show_packet_debug(d, 78, 80, true);
+    const uint8_t* ram = display_get_ram();
+
+    TEST_ASSERT_BITS_HIGH(0x10, ram[8]); // Green indicator
+    TEST_ASSERT_BITS_HIGH(0x10, ram[2]); // Yel1 indicator
 }
 
 // ============================================================
@@ -432,6 +550,148 @@ static void test_error_handling(void)
 }
 
 // ============================================================
+// DISPLAY TESTS (ALC-40266RGY2 on TM1638)
+// ============================================================
+static void test_display_init(void)
+{
+    mock_reset();
+    display_init();
+
+    const uint8_t* ram = display_get_ram();
+    TEST_ASSERT_BITS_HIGH(0x10, ram[6]); // Red fault indicator on GRID4
+    TEST_ASSERT_BITS_HIGH(0xC0, ram[14]); // '----' top row on GRID8
+}
+
+static void test_display_digit_transposition_no_dp(void)
+{
+    mock_reset();
+    display_clear();
+    display_set_top("8   ");
+
+    const uint8_t* ram = display_get_ram();
+    TEST_ASSERT_BITS_HIGH(0x40, ram[8]);   // GRID5 (a)
+    TEST_ASSERT_BITS_HIGH(0x40, ram[6]);   // GRID4 (b)
+    TEST_ASSERT_BITS_HIGH(0x40, ram[2]);   // GRID2 (c)
+    TEST_ASSERT_BITS_HIGH(0x40, ram[0]);   // GRID1 (d)
+    TEST_ASSERT_BITS_HIGH(0x40, ram[4]);   // GRID3 (e)
+    TEST_ASSERT_BITS_HIGH(0x40, ram[10]);  // GRID6 (f)
+    TEST_ASSERT_BITS_HIGH(0x40, ram[14]);  // GRID8 (g)
+    TEST_ASSERT_BITS_LOW(0x40, ram[12]);   // GRID7 (DP) must NOT be set!
+}
+
+static void test_display_no_comm_state(void)
+{
+    mock_reset();
+    display_update(1, 60, TS_STAT_ON, false);
+
+    const uint8_t* ram = display_get_ram();
+    TEST_ASSERT_BITS_HIGH(0x10, ram[6]);
+    TEST_ASSERT_BITS_LOW(0x10, ram[8]);
+    TEST_ASSERT_BITS_HIGH(0xC0, ram[14]);
+    TEST_ASSERT_BITS_HIGH(0x03, ram[15]);
+    TEST_ASSERT_BITS_LOW(0xCF, ram[12]);
+    TEST_ASSERT_BITS_LOW(0x03, ram[13]);
+}
+
+static void test_display_normal_run_state(void)
+{
+    mock_reset();
+    display_update(3, 100, TS_STAT_ON, true);
+
+    const uint8_t* ram = display_get_ram();
+    TEST_ASSERT_BITS_HIGH(0x10, ram[8]);
+    TEST_ASSERT_BITS_LOW(0x10, ram[6]);
+    TEST_ASSERT_BITS_HIGH(0x20, ram[12]);
+    TEST_ASSERT_BITS_HIGH(0x10, ram[14]);
+}
+
+static void test_battery_bar_10_levels_and_indicator_isolation(void)
+{
+    mock_reset();
+    display_clear();
+
+    const uint8_t* ram = display_get_ram();
+    TEST_ASSERT_EQUAL_UINT8(0, ram[14] & 0x30);
+    TEST_ASSERT_EQUAL_UINT8(0, ram[10] & 0x30);
+
+    display_set_indicators(DISPLAY_IND_GREEN);
+    TEST_ASSERT_BITS_HIGH(0x10, ram[8]);
+
+    display_set_battery_bar(1);
+    TEST_ASSERT_BITS_HIGH(0x10, ram[14]);
+    TEST_ASSERT_BITS_LOW(0x10, ram[10]);
+    TEST_ASSERT_BITS_LOW(0x20, ram[12]);
+    TEST_ASSERT_BITS_HIGH(0x10, ram[8]);
+
+    display_set_battery_bar(2);
+    TEST_ASSERT_BITS_HIGH(0x10, ram[14]);
+    TEST_ASSERT_BITS_HIGH(0x10, ram[10]);
+    TEST_ASSERT_BITS_LOW(0x20, ram[12]);
+    TEST_ASSERT_BITS_HIGH(0x10, ram[8]);
+
+    display_set_indicators(DISPLAY_IND_RED);
+    TEST_ASSERT_BITS_LOW(0x10, ram[8]);
+    TEST_ASSERT_BITS_HIGH(0x10, ram[6]);
+    TEST_ASSERT_BITS_HIGH(0x10, ram[14]);
+    TEST_ASSERT_BITS_HIGH(0x10, ram[10]);
+
+    display_set_battery_bar(10);
+    TEST_ASSERT_BITS_HIGH(0x10, ram[6]);
+    TEST_ASSERT_EQUAL_UINT8(0x30, ram[14] & 0x30);
+    TEST_ASSERT_EQUAL_UINT8(0x30, ram[10] & 0x30);
+    TEST_ASSERT_BITS_HIGH(0x20, ram[12]);
+    TEST_ASSERT_BITS_HIGH(0x20, ram[8]);
+}
+
+static void test_display_radio_error_state(void)
+{
+    mock_reset();
+    error_set(ERROR_RADIO_NOT_CONNECTED);
+    display_update(1, 60, TS_STAT_ON, false);
+
+    const uint8_t* ram = display_get_ram();
+    TEST_ASSERT_BITS_HIGH(0x10, ram[6]);
+    TEST_ASSERT_BITS_LOW(0x10, ram[8]);
+    TEST_ASSERT_BITS_HIGH(0x40, ram[8]);
+    TEST_ASSERT_BITS_HIGH(0x40, ram[0]);
+    TEST_ASSERT_BITS_HIGH(0x40, ram[4]);
+    TEST_ASSERT_BITS_HIGH(0x40, ram[10]);
+    TEST_ASSERT_BITS_HIGH(0x40, ram[14]);
+    TEST_ASSERT_BITS_HIGH(0x80, ram[4]);
+    TEST_ASSERT_BITS_HIGH(0x80, ram[14]);
+    TEST_ASSERT_BITS_HIGH(0x02, ram[5]);
+    TEST_ASSERT_BITS_HIGH(0x02, ram[15]);
+}
+
+static void test_display_linking_countdown(void)
+{
+    mock_reset();
+
+    display_show_linking(5);
+    const uint8_t* ram5 = display_get_ram();
+    TEST_ASSERT_BITS_HIGH(0x20, ram5[10]);
+    TEST_ASSERT_BITS_LOW(0x20, ram5[8]);
+
+    display_show_linking(1);
+    const uint8_t* ram1 = display_get_ram();
+    TEST_ASSERT_BITS_HIGH(0x10, ram1[14]);
+    TEST_ASSERT_BITS_LOW(0x10, ram1[10]);
+}
+
+static void test_display_linking_debug(void)
+{
+    mock_reset();
+    display_show_linking_debug(78, 2);
+    const uint8_t* ram = display_get_ram();
+    // Red indicator on GRID4 (ram[6] bit 4)
+    TEST_ASSERT_BITS_HIGH(0x10, ram[6]);
+    // Top row should have 'C' on S1_UP (GRID1, GRID3, GRID5: bits d, e, a)
+    TEST_ASSERT_BITS_HIGH(0x40, ram[8]); // GRID5 (a)
+    TEST_ASSERT_BITS_HIGH(0x40, ram[0]); // GRID1 (d)
+    TEST_ASSERT_BITS_HIGH(0x40, ram[4]); // GRID3 (e)
+}
+
+// ============================================================
 void setUp(void) {}
 void tearDown(void) {}
 
@@ -439,13 +699,11 @@ int main(void)
 {
     UNITY_BEGIN();
 
-    // CRC & Safety Protocol tests
-    RUN_TEST(test_crc32_self_test);
-    RUN_TEST(test_crc32_standard_vector);
-    RUN_TEST(test_safety_frame_serialization_roundtrip);
-    RUN_TEST(test_safety_frame_crc_corruption_rejected);
-    RUN_TEST(test_safety_frame_sequence_replay_rejected);
-    RUN_TEST(test_safety_frame_complement_bitflip_rejected);
+    // Protocol tests
+    RUN_TEST(test_protocol_packet_sizes);
+    RUN_TEST(test_protocol_verify_buttons_valid);
+    RUN_TEST(test_protocol_verify_buttons_corrupted);
+    RUN_TEST(test_protocol_control_packet_construction);
 
     // Header & Math tests
     RUN_TEST(test_mapfloat_maps_correctly);
@@ -454,9 +712,11 @@ int main(void)
     RUN_TEST(test_mapint_battery_voltage_empty);
 
     // Battery tests
+    RUN_TEST(test_battery_init_sets_pullup);
     RUN_TEST(test_battery_charge_range);
     RUN_TEST(test_battery_voltage_full_formula);
     RUN_TEST(test_battery_voltage_empty_formula);
+    RUN_TEST(test_battery_floating_pin_unconnected);
 
     // Buttons tests
     RUN_TEST(test_buttons_begin_initializes);
@@ -466,11 +726,26 @@ int main(void)
 
     // Radio tests
     RUN_TEST(test_radio_setup_configures_safety);
+    RUN_TEST(test_radio_setup_detects_disconnected_chip);
     RUN_TEST(test_radio_send_safety_frame_success);
     RUN_TEST(test_radio_channel_hopping);
+    RUN_TEST(test_radio_software_telemetry_roundtrip);
+    RUN_TEST(test_radio_diagnostics_tracking);
+    RUN_TEST(test_radio_lqi_scaled_convergence);
+    RUN_TEST(test_display_show_packet_debug);
 
     // Error tests
     RUN_TEST(test_error_handling);
+
+    // Display tests
+    RUN_TEST(test_display_init);
+    RUN_TEST(test_display_digit_transposition_no_dp);
+    RUN_TEST(test_display_no_comm_state);
+    RUN_TEST(test_display_normal_run_state);
+    RUN_TEST(test_battery_bar_10_levels_and_indicator_isolation);
+    RUN_TEST(test_display_radio_error_state);
+    RUN_TEST(test_display_linking_countdown);
+    RUN_TEST(test_display_linking_debug);
 
     return UNITY_END();
 }

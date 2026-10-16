@@ -1,18 +1,19 @@
 #include <Arduino.h>
+#ifdef __AVR__
+#include <avr/wdt.h>
+#endif
 #include "radio.h"
 #include "header.h"
 #include "buttons.h"
 #include "battery.h"
 #include "display.h"
 #include "error.h"
-#include "safety_protocol.h"
+#include "protocol.h"
 
 // Communication timing constants
-#define COMM_TIMEOUT_MS 250UL
-#define MAX_CONSECUTIVE_TX_FAILS 5
+#define COMM_TIMEOUT_MS 200UL
 
 // Local Global-Variables
-RF24 radio(CE_PIN, CSN_PIN);
 ts_status local_ts_status = TS_STAT_ON;
 uint16_t local_buttons = 0;
 uint8_t battery_cap = 0;
@@ -21,117 +22,209 @@ uint8_t local_active_unit = 0;
 bool local_comm_ok = false;
 unsigned long last_comm_ms = 0;
 uint32_t monotonic_tx_seq = 1;
-uint32_t last_rx_seq = 0;
 uint8_t consecutive_tx_failures = 0;
 bool battery_low_logged = false;
 
 void setup()
 {
-#if DEBUG
-    Serial.begin(9600);
-    while (!Serial)
-        ;
-    Serial.println(F("[SYSTEM] UTECO Transmitter Safe Pendant Initializing..."));
+#ifdef __AVR__
+    wdt_disable();
 #endif
 
-    // Setup RF24 Radio
-    radio_setup(&radio);
+    // 0. Immediately park nRF24 SPI bus lines to prevent floating-pin bus corruption during display init
+    pinMode(CSN_PIN, OUTPUT);
+    digitalWrite(CSN_PIN, HIGH);
+    pinMode(CE_PIN, OUTPUT);
+    digitalWrite(CE_PIN, LOW);
 
-    // Initialize the Matrix Button scanner
+    // 1. Initialize the TM1638 Display FIRST so the operator gets immediate visual output
+    display_init();
+
+    // 2. Initialize Battery ADC pin with internal pullup
+    battery_init();
+
+    // 3. Initialize the Matrix Button scanner
     buttons_begin();
 
-    // Initialize the TM1638 Display
-    display_init();
-    display_update(local_active_unit, battery_cap, local_ts_status, local_comm_ok);
-
-#if DEBUG
-    Serial.println(F("[SYSTEM] Transmitter Pendant Ready."));
-#endif
+    // 4. Setup RF24 Radio
+    radio_setup();
 }
 
 void loop()
 {
     unsigned long now = millis();
 
-    // 1. Read 15-Button Matrix (16-bit bitmask)
-    local_buttons = read_buttons();
+    // 1. Hardware Connection Health Check of nRF24 Transceiver (with debouncing)
+    static uint8_t radio_disconnect_count = 0;
+    static bool radio_hardware_error = false;
 
-    // 2. Read Battery Telemetry
-    battery_cap = battery_charge();
-    battery_mv = battery_millivolts();
-
-    if (battery_cap < 50)
+    if (!radio_is_chip_connected())
     {
-        if (!battery_low_logged)
+        if (radio_disconnect_count < 20)
         {
-#if DEBUG
-            Serial.println(F("[BATTERY] Battery Low Warning"));
-#endif
-            battery_low_logged = true;
+            radio_disconnect_count++;
         }
-        local_ts_status = TS_STAT_BATTERYLOW;
-        error_set(ERROR_BATTERY_LOW);
+        else
+        {
+            radio_hardware_error = true;
+            error_set(ERROR_RADIO_NOT_CONNECTED);
+        }
     }
     else
     {
-        battery_low_logged = false;
-        local_ts_status = TS_STAT_ON;
-        error_clear(ERROR_BATTERY_LOW);
+        radio_disconnect_count = 0;
+        radio_hardware_error = false;
+        error_clear(ERROR_RADIO_NOT_CONNECTED);
     }
 
-    // 3. Transmit Deterministic Black Channel Safety Frame (Cyclic 20 ms)
-    bool sent = radio_send_safety_frame(
-        &radio,
-        local_buttons,
-        battery_mv,
-        local_ts_status,
-        monotonic_tx_seq++
-    );
+    if (radio_hardware_error)
+    {
+        local_comm_ok = false;
+        static unsigned long last_err_display_ms = 0;
+        if (now - last_err_display_ms >= 50UL)
+        {
+            last_err_display_ms = now;
+            display_show_radio_error();
+        }
+
+        // Auto-recovery: Re-initialize nRF24 every 500ms when module is reconnected
+        static unsigned long last_reinit_ms = 0;
+        if (now - last_reinit_ms >= 500UL)
+        {
+            last_reinit_ms = now;
+            radio_setup();
+            if (radio_is_chip_connected())
+            {
+                radio_hardware_error = false;
+                radio_disconnect_count = 0;
+                error_clear(ERROR_RADIO_NOT_CONNECTED);
+            }
+        }
+
+        delay(20);
+        return;
+    }
+
+    // 2. Read 15-Button Matrix (16-bit bitmask)
+    local_buttons = read_buttons();
+
+    // 3. Read Battery Telemetry
+    battery_mv = battery_millivolts();
+    bool bat_connected = battery_is_connected();
+
+    if (!bat_connected)
+    {
+        // Battery pin is floating or unconnected (bench power mode)
+        battery_cap = 100;
+        local_ts_status = TS_STAT_ON;
+        battery_low_logged = false;
+        error_clear(ERROR_BATTERY_LOW);
+    }
+    else
+    {
+        // Map 0..255 battery charge to 0..100 percentage
+        battery_cap = (uint8_t)(((uint16_t)battery_charge() * 100) / 255);
+        if (battery_cap < 20)
+        {
+            if (!battery_low_logged)
+            {
+                battery_low_logged = true;
+            }
+            local_ts_status = TS_STAT_BATTERYLOW;
+            error_set(ERROR_BATTERY_LOW);
+        }
+        else
+        {
+            battery_low_logged = false;
+            local_ts_status = TS_STAT_ON;
+            error_clear(ERROR_BATTERY_LOW);
+        }
+    }
+
+    // 4. Transmit Deterministic Control Packet (Cyclic 20 ms)
+    ControlPacket pkt;
+    pkt.buttons = local_buttons;
+    pkt.buttons_inv = (uint16_t)(~local_buttons);
+    pkt.battery_mv = battery_mv;
+    pkt.status = (uint8_t)local_ts_status;
+    pkt.seq = (uint8_t)(monotonic_tx_seq++ & 0xFF);
+
+    TelemetryPacket tel = {0, 0, 0, 0};
+    bool tel_received = false;
+    bool sent = radio_send_control(pkt, &tel, &tel_received);
 
     if (sent)
     {
         error_clear(ERROR_TRANSMIT_FAILED);
         last_comm_ms = now;
         consecutive_tx_failures = 0;
+        if (tel_received && tel.active_unit > 0)
+        {
+            local_active_unit = tel.active_unit;
+        }
     }
     else
     {
         error_set(ERROR_TRANSMIT_FAILED);
         consecutive_tx_failures++;
-
-        // Adaptive frequency hopping after 5 consecutive dropped frames (100 ms)
-        if (consecutive_tx_failures >= MAX_CONSECUTIVE_TX_FAILS)
-        {
-#if DEBUG
-            Serial.println(F("[RADIO] Consecutive TX fails -> Hopping to next Wi-Fi Guard Channel"));
-#endif
-            radio_hop_next_channel(&radio);
-            consecutive_tx_failures = 0;
-        }
-    }
-
-    // 4. Read Telemetry / ACK Feedback from Receiver
-    if (radio_read_telemetry(&radio, &local_active_unit, &last_rx_seq))
-    {
-        last_comm_ms = now;
     }
 
     // 5. Link Health & Status Monitoring
     local_comm_ok = (now - last_comm_ms) < COMM_TIMEOUT_MS;
-    if (!local_comm_ok)
-    {
-        error_set(ERROR_NO_COMMUNICATION);
-    }
-    else
+    if (local_comm_ok)
     {
         error_clear(ERROR_NO_COMMUNICATION);
     }
+    else
+    {
+        error_set(ERROR_NO_COMMUNICATION);
+    }
 
-    // 6. Update TM1638 Display
-    display_update(local_active_unit, battery_cap, local_ts_status, local_comm_ok);
+    // 6. Update TM1638 Display (rate-limited to 40 ms / 25 Hz for flicker-free display)
+    static unsigned long last_display_ms = 0;
+    if (now - last_display_ms >= 40UL)
+    {
+        last_display_ms = now;
+#if (defined(TEST) && TEST) || (defined(DEBUG) && DEBUG)
+        display_show_packet_debug(radio_get_diagnostics(), radio_get_channel(), radio_get_lqi(), !radio_hardware_error);
+#else
+        if (local_comm_ok)
+        {
+            display_update(local_active_unit, battery_cap, local_ts_status, true, local_buttons, battery_mv, error_state);
+        }
+        else
+        {
+            // Alternate every 1.5 seconds between "CONN / no L" and "C 78 / E-02"
+            static unsigned long last_link_toggle_ms = 0;
+            static bool link_show_channel_err = false;
+            if (now - last_link_toggle_ms >= 1500UL)
+            {
+                last_link_toggle_ms = now;
+                link_show_channel_err = !link_show_channel_err;
+            }
 
-    // 7. Error LED and diagnostics handling
+            if (link_show_channel_err)
+            {
+                display_show_linking_debug(radio_get_channel(), radio_get_diagnostics().last_error_code);
+            }
+            else
+            {
+                display_show_linking(0);
+            }
+        }
+#endif
+    }
+
+    // 7. Error LED and diagnostics handling (Orange LED on pin 13 lights up on any button press)
     transaction_error_handling();
+    if (local_buttons != 0)
+    {
+        digitalWrite(LED_BUILTIN, HIGH);
+    }
 
-    delay(20);
+    unsigned long cycle_elapsed = millis() - now;
+    if (cycle_elapsed < TX_CYCLE_PERIOD_MS)
+    {
+        delay(TX_CYCLE_PERIOD_MS - cycle_elapsed);
+    }
 }
