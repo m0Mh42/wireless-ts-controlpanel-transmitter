@@ -4,7 +4,6 @@
 #include <stdio.h>
 #include <string.h>
 
-
 // Internal 16-byte RAM mirror for TM1638 (GRID1..GRID8, 2 bytes each)
 static uint8_t tm_ram[16];
 static uint8_t current_brightness = 7;
@@ -360,7 +359,7 @@ void display_show_linking(uint8_t seconds_left)
     if (seconds_left == 0)
     {
         display_set_bottom("no L");
-        display_set_battery_bar(0);
+        // display_set_battery_bar(0);
     }
     else
     {
@@ -464,32 +463,32 @@ void display_update(uint8_t active_unit, uint8_t battery_level, ts_status status
         {
             snprintf(buf, sizeof(buf), "%04X", buttons);
         }
-        else if (battery_mv >= 9000 && battery_mv <= 15000)
+        else if (battery_mv >= 2500 && battery_mv <= 4500)
         {
-            snprintf(buf, sizeof(buf), "%2d.%1d", battery_mv / 1000, (battery_mv % 1000) / 100);
+            snprintf(buf, sizeof(buf), "%1d.%02d", battery_mv / 1000, (battery_mv % 1000) / 10);
         }
         else
         {
             snprintf(buf, sizeof(buf), "----");
         }
-#else
-        if (battery_mv >= 9000 && battery_mv <= 15000)
-        {
-            snprintf(buf, sizeof(buf), "%2d.%1d", battery_mv / 1000, (battery_mv % 1000) / 100);
-        }
-        else
-        {
-            snprintf(buf, sizeof(buf), "----");
-        }
+// #else
+//         if (battery_mv >= 2500 && battery_mv <= 4500)
+//         {
+//             snprintf(buf, sizeof(buf), "%1d.%02d", battery_mv / 1000, (battery_mv % 1000) / 10);
+//         }
+//         else
+//         {
+//             snprintf(buf, sizeof(buf), "");
+//         }
 #endif
-        display_set_bottom(buf);
+        // display_set_bottom(buf);
         display_set_indicators(DISPLAY_IND_GREEN);
     }
 
     display_refresh();
 }
 
-void display_show_packet_debug(const RadioTxDiagnostics& diag, uint8_t channel, uint8_t lqi, bool chip_connected)
+void display_show_packet_debug(const RadioTxDiagnostics &diag, uint8_t channel, uint8_t lqi, bool chip_connected)
 {
     (void)lqi;
     display_enabled = true;
@@ -553,7 +552,8 @@ void display_show_packet_debug(const RadioTxDiagnostics& diag, uint8_t channel, 
     if (diag.tx_attempt_count > 0)
     {
         uint32_t pct = (diag.tx_success_count * 10UL + (diag.tx_attempt_count / 2UL)) / diag.tx_attempt_count;
-        if (pct > 10) pct = 10;
+        if (pct > 10)
+            pct = 10;
         bars = (uint8_t)pct;
     }
     display_set_battery_bar(bars);
@@ -565,13 +565,17 @@ void display_show_packet_debug(const RadioTxDiagnostics& diag, uint8_t channel, 
     // Bit 3: Yel 2  (0x08) -> 1 Mbps mode active
     // Bit 4: Yel 3  (0x10) -> nRF chip connected
     uint8_t ind_mask = 0;
-    if (diag.last_tx_ok) ind_mask |= DISPLAY_IND_GREEN;
-    if (!diag.last_tx_ok && diag.tx_attempt_count > 0) ind_mask |= DISPLAY_IND_RED;
-    if (diag.last_ack_payload_ok) ind_mask |= DISPLAY_IND_YEL1;
-    if (diag.datarate_1mbps) ind_mask |= DISPLAY_IND_YEL2;
-    if (chip_connected) ind_mask |= DISPLAY_IND_YEL3;
+    if (diag.last_tx_ok)
+        ind_mask |= DISPLAY_IND_GREEN;
+    if (!diag.last_tx_ok && diag.tx_attempt_count > 0)
+        ind_mask |= DISPLAY_IND_RED;
+    if (diag.last_ack_payload_ok)
+        ind_mask |= DISPLAY_IND_YEL1;
+    if (diag.datarate_1mbps)
+        ind_mask |= DISPLAY_IND_YEL2;
+    if (chip_connected)
+        ind_mask |= DISPLAY_IND_YEL3;
 
     display_set_indicators(ind_mask);
     display_refresh();
 }
-

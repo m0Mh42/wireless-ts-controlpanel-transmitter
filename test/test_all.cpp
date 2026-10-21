@@ -60,6 +60,7 @@ bool mock_tm1638_cleared;
 
 // Mock matrix button press
 int mock_matrix_pressed_btn = -1;
+uint16_t mock_matrix_pressed_mask = 0;
 
 // SPI instance
 SPIClass SPI;
@@ -71,11 +72,28 @@ extern "C" {
 
 int digitalRead(uint8_t pin)
 {
+    if (mock_matrix_pressed_mask != 0) {
+        const uint8_t row_pins[4] = {MATRIX_ROW_1, MATRIX_ROW_2, MATRIX_ROW_3, MATRIX_ROW_4};
+        const uint8_t col_pins[4] = {MATRIX_COL_1, MATRIX_COL_2, MATRIX_COL_3, MATRIX_COL_4};
+        for (int r = 0; r < 4; r++) {
+            if (mock_pin_written[row_pins[r]] == LOW) {
+                for (int c = 0; c < 4; c++) {
+                    if (pin == col_pins[c]) {
+                        int btn_id = (r * 4) + c;
+                        if (mock_matrix_pressed_mask & ((uint16_t)1 << btn_id)) {
+                            return LOW;
+                        }
+                    }
+                }
+            }
+        }
+        return HIGH;
+    }
     if (mock_matrix_pressed_btn >= 0) {
-        int r = mock_matrix_pressed_btn / 3;
-        int c = mock_matrix_pressed_btn % 3;
-        const uint8_t row_pins[5] = {MATRIX_ROW_1, MATRIX_ROW_2, MATRIX_ROW_3, MATRIX_ROW_4, MATRIX_ROW_5};
-        const uint8_t col_pins[3] = {MATRIX_COL_1, MATRIX_COL_2, MATRIX_COL_3};
+        int r = mock_matrix_pressed_btn / 4;
+        int c = mock_matrix_pressed_btn % 4;
+        const uint8_t row_pins[4] = {MATRIX_ROW_1, MATRIX_ROW_2, MATRIX_ROW_3, MATRIX_ROW_4};
+        const uint8_t col_pins[4] = {MATRIX_COL_1, MATRIX_COL_2, MATRIX_COL_3, MATRIX_COL_4};
         if (pin == col_pins[c]) {
             return (mock_pin_written[row_pins[r]] == LOW) ? LOW : HIGH;
         }
@@ -179,6 +197,7 @@ static void mock_reset(void)
     mock_tm1638_cleared = false;
     mock_tm1638_display_str[0] = '\0';
     mock_matrix_pressed_btn = -1;
+    mock_matrix_pressed_mask = 0;
 
     error_state = ERROR_NONE;
     error_counter = 0;
@@ -252,15 +271,15 @@ static void test_mapint_maps_correctly(void)
 
 static void test_mapint_battery_voltage_full(void)
 {
-    float full_v = 12.0f;
-    int charge = mapint(full_v, 10, 12, 0, 255);
+    float full_mv = 4200.0f;
+    int charge = mapint(full_mv, 3000, 4200, 0, 255);
     TEST_ASSERT_EQUAL_INT(255, charge);
 }
 
 static void test_mapint_battery_voltage_empty(void)
 {
-    float empty_v = 10.0f;
-    int charge = mapint(empty_v, 10, 12, 0, 255);
+    float empty_mv = 3000.0f;
+    int charge = mapint(empty_mv, 3000, 4200, 0, 255);
     TEST_ASSERT_EQUAL_INT(0, charge);
 }
 
@@ -279,13 +298,13 @@ static void test_battery_charge_range(void)
     mock_reset();
     battery_init();
 
-    // Connected full battery (12V): charge is 255
-    mock_analog_read_value = 738;
+    // Connected full 18650 battery (4.2V, ADC ~430): charge is 255
+    mock_analog_read_value = 430;
     uint8_t c = battery_charge();
     TEST_ASSERT_UINT8_WITHIN(2, 255, c);
 
-    // Connected empty battery (10V): charge is 0
-    mock_analog_read_value = 614;
+    // Connected empty 18650 battery (3.0V, ADC ~307): charge is 0
+    mock_analog_read_value = 307;
     c = battery_charge();
     TEST_ASSERT_EQUAL_UINT8(0, c);
 }
@@ -295,10 +314,10 @@ static void test_battery_voltage_full_formula(void)
     mock_reset();
     battery_init();
 
-    // ADC = 737: (737 * 5.0) / (1024 * 0.3) = 11.995 V -> approx 12000 mV
-    mock_analog_read_value = 737;
+    // ADC = 430: (430 * 5.0) / (1024 * 0.5) = 4.199 V -> approx 4200 mV
+    mock_analog_read_value = 430;
     uint16_t mv = battery_millivolts();
-    TEST_ASSERT_UINT16_WITHIN(100, 12000, mv);
+    TEST_ASSERT_UINT16_WITHIN(50, 4200, mv);
 }
 
 static void test_battery_voltage_empty_formula(void)
@@ -306,10 +325,10 @@ static void test_battery_voltage_empty_formula(void)
     mock_reset();
     battery_init();
 
-    // ADC = 614: (614 * 5.0) / (1024 * 0.3) = 9.993 V -> approx 10000 mV
-    mock_analog_read_value = 614;
+    // ADC = 307: (307 * 5.0) / (1024 * 0.5) = 2.998 V -> approx 3000 mV
+    mock_analog_read_value = 307;
     uint16_t mv = battery_millivolts();
-    TEST_ASSERT_UINT16_WITHIN(100, 10000, mv);
+    TEST_ASSERT_UINT16_WITHIN(50, 3000, mv);
 }
 
 static void test_battery_floating_pin_unconnected(void)
@@ -317,31 +336,31 @@ static void test_battery_floating_pin_unconnected(void)
     mock_reset();
     battery_init();
 
-    // Low voltage below 8V threshold -> not connected
-    mock_analog_read_value = 300;
+    // Low voltage below 2.5V threshold -> not connected
+    mock_analog_read_value = 150;
     TEST_ASSERT_FALSE(battery_is_connected());
 
-    // Normal connected battery above 8V threshold -> connected
-    mock_analog_read_value = 700;
+    // Normal connected 18650 battery above 2.5V threshold -> connected
+    mock_analog_read_value = 400;
     TEST_ASSERT_TRUE(battery_is_connected());
 }
 
 // ============================================================
-// BUTTONS TESTS (5x3 Matrix)
+// BUTTONS TESTS (4x4 Matrix)
 // ============================================================
 static void test_buttons_begin_initializes(void)
 {
     mock_reset();
     buttons_begin();
 
-    const uint8_t row_pins[5] = {MATRIX_ROW_1, MATRIX_ROW_2, MATRIX_ROW_3, MATRIX_ROW_4, MATRIX_ROW_5};
-    const uint8_t col_pins[3] = {MATRIX_COL_1, MATRIX_COL_2, MATRIX_COL_3};
+    const uint8_t row_pins[4] = {MATRIX_ROW_1, MATRIX_ROW_2, MATRIX_ROW_3, MATRIX_ROW_4};
+    const uint8_t col_pins[4] = {MATRIX_COL_1, MATRIX_COL_2, MATRIX_COL_3, MATRIX_COL_4};
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 4; i++) {
         TEST_ASSERT_EQUAL_INT(OUTPUT, mock_pin_mode[row_pins[i]]);
         TEST_ASSERT_EQUAL_INT(HIGH, mock_pin_written[row_pins[i]]);
     }
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         TEST_ASSERT_EQUAL_INT(INPUT_PULLUP, mock_pin_mode[col_pins[i]]);
     }
 }
@@ -365,9 +384,76 @@ static void test_read_buttons_row0_col0(void)
 static void test_read_buttons_row4_col2(void)
 {
     mock_reset();
-    mock_matrix_pressed_btn = 14; // Row 4, Col 2 -> bit 14
+    mock_matrix_pressed_btn = 14; // Row 3, Col 2 -> bit 14 (BUTTON_COLOR_COLORE)
     uint16_t result = read_buttons();
     TEST_ASSERT_EQUAL_HEX16(0x4000, result);
+}
+
+static void test_read_buttons_all_4x4_positions(void)
+{
+    for (int i = 0; i < 16; i++) {
+        mock_reset();
+        mock_matrix_pressed_btn = i;
+        uint16_t result = read_buttons();
+        TEST_ASSERT_EQUAL_HEX16((uint16_t)(1U << i), result);
+    }
+}
+
+static void test_read_buttons_simultaneous_multi_press(void)
+{
+    mock_reset();
+    // Press two buttons simultaneously: Register Avanti (D9-D3: 0x0001) + Anilox Av Posteriore (D18-D4: 0x0020)
+    mock_matrix_pressed_mask = BUTTON_REGISTER_AVANTI | BUTTON_ANILOX_AV_POSTERIORE;
+    uint16_t result = read_buttons();
+    TEST_ASSERT_EQUAL_HEX16(0x0021, result);
+
+    mock_reset();
+    // Press three buttons across different rows:
+    // Register Indietro (0x0002) + Cliche Av Posteriore (0x0400) + Color Attacco (0x1000)
+    mock_matrix_pressed_mask = BUTTON_REGISTER_INDIETRO | BUTTON_CLICHE_AV_POSTERIORE | BUTTON_COLOR_ATTACCO;
+    result = read_buttons();
+    TEST_ASSERT_EQUAL_HEX16(0x1402, result);
+
+    mock_reset();
+    // Press E-Stop together with Color Colore
+    mock_matrix_pressed_mask = BUTTON_ESTOP_ACTIVE | BUTTON_COLOR_COLORE;
+    result = read_buttons();
+    TEST_ASSERT_EQUAL_HEX16(0xC000, result);
+}
+
+static void test_read_buttons_all_16_simultaneous(void)
+{
+    mock_reset();
+    mock_matrix_pressed_mask = 0xFFFF;
+    uint16_t result = read_buttons();
+    TEST_ASSERT_EQUAL_HEX16(0xFFFF, result);
+}
+
+static void test_buttons_enum_bitmask_consistency(void)
+{
+    // Register (Row 0: D9)
+    TEST_ASSERT_EQUAL_HEX16(0x0001, BUTTON_REGISTER_AVANTI);     // D9 - D3
+    TEST_ASSERT_EQUAL_HEX16(0x0002, BUTTON_REGISTER_INDIETRO);   // D9 - D4
+    TEST_ASSERT_EQUAL_HEX16(0x0004, BUTTON_REGISTER_ABTERIORE);  // D9 - D5
+    TEST_ASSERT_EQUAL_HEX16(0x0008, BUTTON_REGISTER_POSTERIORE); // D9 - D6
+
+    // Anilox (Row 1: D18)
+    TEST_ASSERT_EQUAL_HEX16(0x0010, BUTTON_ANILOX_AV_ANTERIORE);  // D18 - D3
+    TEST_ASSERT_EQUAL_HEX16(0x0020, BUTTON_ANILOX_AV_POSTERIORE); // D18 - D4
+    TEST_ASSERT_EQUAL_HEX16(0x0040, BUTTON_ANILOX_IN_ANTERIORE);  // D18 - D5
+    TEST_ASSERT_EQUAL_HEX16(0x0080, BUTTON_ANILOX_IN_POSTERIORE); // D18 - D6
+
+    // Cliche (Row 2: D19)
+    TEST_ASSERT_EQUAL_HEX16(0x0100, BUTTON_CLICHE_AV_ANTERIORE);  // D19 - D3
+    TEST_ASSERT_EQUAL_HEX16(0x0200, BUTTON_CLICHE_IN_ANTERIORE);  // D19 - D4
+    TEST_ASSERT_EQUAL_HEX16(0x0400, BUTTON_CLICHE_AV_POSTERIORE); // D19 - D5
+    TEST_ASSERT_EQUAL_HEX16(0x0800, BUTTON_CLICHE_IN_POSTERIORE); // D19 - D6
+
+    // Color & E-Stop (Row 3: D20)
+    TEST_ASSERT_EQUAL_HEX16(0x1000, BUTTON_COLOR_ATTACCO); // D20 - D3
+    TEST_ASSERT_EQUAL_HEX16(0x2000, BUTTON_COLOR_STACCO);  // D20 - D4
+    TEST_ASSERT_EQUAL_HEX16(0x4000, BUTTON_COLOR_COLORE);  // D20 - D5
+    TEST_ASSERT_EQUAL_HEX16(0x8000, BUTTON_ESTOP_ACTIVE);  // D20 - D6
 }
 
 // ============================================================
@@ -605,6 +691,21 @@ static void test_display_normal_run_state(void)
     TEST_ASSERT_BITS_HIGH(0x10, ram[14]);
 }
 
+static void test_display_18650_voltage_bottom_row(void)
+{
+    mock_reset();
+    // 4150 mV should format as "4.15" on bottom row
+    display_update(1, 100, TS_STAT_ON, true, 0, 4150);
+
+    const uint8_t* ram = display_get_ram();
+    // Digit 0 of bottom row is SEG4 (bit mask 0x08, low byte)
+    // '4' has segments b (GRID4, ram[6]), c (GRID2, ram[2]), f (GRID6, ram[10]), g (GRID8, ram[14])
+    TEST_ASSERT_BITS_HIGH(0x08, ram[6]);
+    TEST_ASSERT_BITS_HIGH(0x08, ram[2]);
+    TEST_ASSERT_BITS_HIGH(0x08, ram[10]);
+    TEST_ASSERT_BITS_HIGH(0x08, ram[14]);
+}
+
 static void test_battery_bar_10_levels_and_indicator_isolation(void)
 {
     mock_reset();
@@ -723,6 +824,10 @@ int main(void)
     RUN_TEST(test_read_buttons_returns_zero_when_idle);
     RUN_TEST(test_read_buttons_row0_col0);
     RUN_TEST(test_read_buttons_row4_col2);
+    RUN_TEST(test_read_buttons_all_4x4_positions);
+    RUN_TEST(test_read_buttons_simultaneous_multi_press);
+    RUN_TEST(test_read_buttons_all_16_simultaneous);
+    RUN_TEST(test_buttons_enum_bitmask_consistency);
 
     // Radio tests
     RUN_TEST(test_radio_setup_configures_safety);
@@ -742,6 +847,7 @@ int main(void)
     RUN_TEST(test_display_digit_transposition_no_dp);
     RUN_TEST(test_display_no_comm_state);
     RUN_TEST(test_display_normal_run_state);
+    RUN_TEST(test_display_18650_voltage_bottom_row);
     RUN_TEST(test_battery_bar_10_levels_and_indicator_isolation);
     RUN_TEST(test_display_radio_error_state);
     RUN_TEST(test_display_linking_countdown);

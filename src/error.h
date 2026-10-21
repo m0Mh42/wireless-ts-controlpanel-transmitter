@@ -6,11 +6,11 @@
 // Bit-flag error codes — multiple errors can be active simultaneously.
 typedef enum error_type_enum
 {
-    ERROR_NONE              = 0,
+    ERROR_NONE = 0,
     ERROR_RADIO_NOT_CONNECTED = 1,
-    ERROR_TRANSMIT_FAILED   = 2,
-    ERROR_BATTERY_LOW       = 4,
-    ERROR_NO_COMMUNICATION  = 8
+    ERROR_TRANSMIT_FAILED = 2,
+    ERROR_BATTERY_LOW = 4,
+    ERROR_NO_COMMUNICATION = 8
 } error_type_enum;
 
 // Bitmask of currently active errors (OR of error_type_enum values).

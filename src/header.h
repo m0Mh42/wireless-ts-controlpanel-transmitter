@@ -51,54 +51,54 @@
 #define TELEMETRY_WAIT_TIMEOUT_MS 25UL // Headroom for clone chips, receiver display refresh, and PA/LNA settling
 
 // RF24 5-Byte Pipe Addresses (Pipes 1..5 share top 4 bytes per Nordic MultiCeiver spec)
-static const uint8_t RF24_PIPE_CONTROL[5]   = {'S', 'A', 'F', 'E', '1'}; // Transmitter -> Receiver
+static const uint8_t RF24_PIPE_CONTROL[5] = {'S', 'A', 'F', 'E', '1'};   // Transmitter -> Receiver
 static const uint8_t RF24_PIPE_TELEMETRY[5] = {'S', 'A', 'F', 'E', '2'}; // Receiver -> Transmitter
-static const uint8_t RF24_SAFETY_PIPE[5]    = {'S', 'A', 'F', 'E', '1'}; // Legacy alias
+static const uint8_t RF24_SAFETY_PIPE[5] = {'S', 'A', 'F', 'E', '1'};    // Legacy alias
 
-// Battery Voltage Input (Transmitter.NET: R1.2/R2.2 -> U2.A3)
+// Battery Voltage Input (Transmitter.NET: R1.2/R2.2 -> U2.A3, 10k + 10k divider)
 #define BATTERY_INPUT_PIN A3
-#define VOLTAGE_DIVIDER_COEFFICIENT 0.3f
-#define BATTERY_FULL_VOLTAGE 12.0f
-#define BATTERY_EMPTY_VOLTAGE 10.0f
+#define VOLTAGE_DIVIDER_COEFFICIENT 0.5f
+#define BATTERY_FULL_VOLTAGE 4.2f
+#define BATTERY_EMPTY_VOLTAGE 3.0f
 
-// 5x3 Button Matrix Pins (Transmitter.NET Connector P4: D5..D9 and A1, A4, A5)
-#define MATRIX_ROW_1 5
-#define MATRIX_ROW_2 6
-#define MATRIX_ROW_3 7
-#define MATRIX_ROW_4 8
-#define MATRIX_ROW_5 9
-#define MATRIX_COL_1 A1
-#define MATRIX_COL_2 A4
-#define MATRIX_COL_3 A5
+// 4x4 Button Matrix Pins (Transmitter.NET Connector P4: D5..D9 and A1, A4, A5)
+#define MATRIX_ROW_1 9  // D9
+#define MATRIX_ROW_2 8  // D18
+#define MATRIX_ROW_3 7  // D19
+#define MATRIX_ROW_4 A1 // D20
+#define MATRIX_COL_1 5  // D3
+#define MATRIX_COL_2 A5 // D4
+#define MATRIX_COL_3 6  // D5
+#define MATRIX_COL_4 A4 // D6
 
-// Button bitmasks for 15-button matrix (16-bit uint16_t)
+// Button bitmasks for 4x4 matrix (16-bit uint16_t: 15 buttons + ESTOP)
 typedef enum buttons_enum
 {
     // Register (4 buttons)
-    BUTTON_REGISTER_AVANTI     = 0x0001,
-    BUTTON_REGISTER_INDIETRO   = 0x0002,
-    BUTTON_REGISTER_ABTERIORE  = 0x0004,
-    BUTTON_REGISTER_POSTERIORE = 0x0008,
+    BUTTON_REGISTER_AVANTI = 0x0001,     // D9 - D3
+    BUTTON_REGISTER_INDIETRO = 0x0002,   // D9 - D4
+    BUTTON_REGISTER_ABTERIORE = 0x0004,  // D9 - D5
+    BUTTON_REGISTER_POSTERIORE = 0x0008, // D9 - D6
 
     // Anilox (4 buttons)
-    BUTTON_ANILOX_AV_ANTERIORE = 0x0010,
-    BUTTON_ANILOX_IN_ANTERIORE = 0x0020,
-    BUTTON_ANILOX_AV_POSTERIORE= 0x0040,
-    BUTTON_ANILOX_IN_POSTERIORE= 0x0080,
+    BUTTON_ANILOX_AV_ANTERIORE = 0x0010,  // D18 - D3
+    BUTTON_ANILOX_AV_POSTERIORE = 0x0020, // D18 - D4
+    BUTTON_ANILOX_IN_ANTERIORE = 0x0040,  // D18 - D5
+    BUTTON_ANILOX_IN_POSTERIORE = 0x0080, // D18 - D6
 
     // Cliche (4 buttons)
-    BUTTON_CLICHE_AV_ANTERIORE = 0x0100,
-    BUTTON_CLICHE_IN_ANTERIORE = 0x0200,
-    BUTTON_CLICHE_AV_POSTERIORE= 0x0400,
-    BUTTON_CLICHE_IN_POSTERIORE= 0x0800,
+    BUTTON_CLICHE_AV_ANTERIORE = 0x0100,  // D19 - D3
+    BUTTON_CLICHE_IN_ANTERIORE = 0x0200,  // D19 - D4
+    BUTTON_CLICHE_AV_POSTERIORE = 0x0400, // D19 - D5
+    BUTTON_CLICHE_IN_POSTERIORE = 0x0800, // D19 - D6
 
     // Color (3 buttons)
-    BUTTON_COLOR_ATTACCO       = 0x1000,
-    BUTTON_COLOR_STACCO        = 0x2000,
-    BUTTON_COLOR_COLORE        = 0x4000,
+    BUTTON_COLOR_ATTACCO = 0x1000, // D20 - D3
+    BUTTON_COLOR_STACCO = 0x2000,  // D20 - D4
+    BUTTON_COLOR_COLORE = 0x4000,  // D20 - D5
 
-    // Emergency stop flag
-    BUTTON_ESTOP_ACTIVE        = 0x8000
+    // Emergency / Safety stop bit
+    BUTTON_ESTOP_ACTIVE = 0x8000 // D20 - D6
 } buttons_enum;
 
 typedef enum ts_status

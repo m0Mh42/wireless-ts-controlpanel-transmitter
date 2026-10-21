@@ -1,6 +1,6 @@
 #include "error.h"
 
-uint8_t  error_state   = ERROR_NONE;
+uint8_t error_state = ERROR_NONE;
 uint16_t error_counter = 0;
 
 static unsigned long last_led_toggle = 0;

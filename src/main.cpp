@@ -194,23 +194,7 @@ void loop()
         }
         else
         {
-            // Alternate every 1.5 seconds between "CONN / no L" and "C 78 / E-02"
-            static unsigned long last_link_toggle_ms = 0;
-            static bool link_show_channel_err = false;
-            if (now - last_link_toggle_ms >= 1500UL)
-            {
-                last_link_toggle_ms = now;
-                link_show_channel_err = !link_show_channel_err;
-            }
-
-            if (link_show_channel_err)
-            {
-                display_show_linking_debug(radio_get_channel(), radio_get_diagnostics().last_error_code);
-            }
-            else
-            {
-                display_show_linking(0);
-            }
+            display_show_linking(0);
         }
 #endif
     }

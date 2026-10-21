@@ -30,51 +30,52 @@ Industrial safety firmware for the **handheld pendant transmitter** of the UTECO
 | **MOSI** | D11 | Master Out Slave In |
 | **MISO** | D12 | Master In Slave Out |
 
-### 2. 15-Button Matrix Keypad (5 Rows x 3 Columns)
-| Signal | Pin | Mode | Description |
-| :--- | :--- | :--- | :--- |
-| `MATRIX_ROW_1` | D2 | Output (Driven LOW during scan) | Keypad Row 1 (Buttons 0..2) |
-| `MATRIX_ROW_2` | D3 | Output (Driven LOW during scan) | Keypad Row 2 (Buttons 3..5) |
-| `MATRIX_ROW_3` | D4 | Output (Driven LOW during scan) | Keypad Row 3 (Buttons 6..8) |
-| `MATRIX_ROW_4` | D5 | Output (Driven LOW during scan) | Keypad Row 4 (Buttons 9..11) |
-| `MATRIX_ROW_5` | D6 | Output (Driven LOW during scan) | Keypad Row 5 (Buttons 12..14) |
-| `MATRIX_COL_1` | D7 | Input Pullup | Keypad Column 1 |
-| `MATRIX_COL_2` | A1 (Pin 15) | Input Pullup | Keypad Column 2 |
-| `MATRIX_COL_3` | A2 (Pin 16) | Input Pullup | Keypad Column 3 |
+### 2. 16-Button Matrix Keypad (4 Rows x 4 Columns)
+| Signal | Arduino Pin | Net / Connector P4 | Mode | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `MATRIX_ROW_1` | D9 | D9 | Output (Driven LOW during scan) | Keypad Row 1 (Register buttons) |
+| `MATRIX_ROW_2` | D8 | D18 | Output (Driven LOW during scan) | Keypad Row 2 (Anilox buttons) |
+| `MATRIX_ROW_3` | D7 | D19 | Output (Driven LOW during scan) | Keypad Row 3 (Cliche buttons) |
+| `MATRIX_ROW_4` | A1 (Pin 15) | D20 | Output (Driven LOW during scan) | Keypad Row 4 (Color buttons + ESTOP) |
+| `MATRIX_COL_1` | D5 | D3 | Input Pullup | Keypad Column 1 |
+| `MATRIX_COL_2` | A5 (Pin 19) | D4 | Input Pullup | Keypad Column 2 |
+| `MATRIX_COL_3` | D6 | D5 | Input Pullup | Keypad Column 3 |
+| `MATRIX_COL_4` | A4 (Pin 18) | D6 | Input Pullup | Keypad Column 4 |
 
-### 3. TM1638 7-Segment Display Module
+### 3. TM1638 7-Segment Display Module (Connector P1)
 | Signal | Pin | Description |
 | :--- | :--- | :--- |
-| `DISPLAY_TM1638_DIO_PIN` | D8 | Data Input/Output |
-| `DISPLAY_TM1638_CLK_PIN` | A4 (Pin 18) | Clock Line |
-| `DISPLAY_TM1638_STB_PIN` | A5 (Pin 19) | Strobe Line |
+| `DISPLAY_TM1638_DIO_PIN` | D2 | Data Input/Output (P1.2) |
+| `DISPLAY_TM1638_CLK_PIN` | D3 | Clock Line (P1.3) |
+| `DISPLAY_TM1638_STB_PIN` | D4 | Strobe Line (P1.4) |
 
 ### 4. Battery Voltage Sensing
 | Signal | Pin | Description |
 | :--- | :--- | :--- |
-| `BATTERY_INPUT_PIN` | A0 (Pin 14) | Analog ADC input via resistive voltage divider (Ratio = 0.2857) |
+| `BATTERY_INPUT_PIN` | A3 (Pin 17) | Analog ADC input via 10k+10k resistive voltage divider (Ratio = 0.5) for 1S 18650 Li-ion cell |
 
 ---
 
-## 15-Button Matrix Mapping
+## 4x4 Button Matrix Mapping
 
-| Button Index | Bitmask Constant | Hex Mask | Function |
-| :--- | :--- | :--- | :--- |
-| **0** | `BUTTON_REGISTER_AVANTI` | `0x0001` | Register Advance |
-| **1** | `BUTTON_REGISTER_INDIETRO` | `0x0002` | Register Retract |
-| **2** | `BUTTON_REGISTER_ABTERIORE` | `0x0004` | Register Anterior / Offset |
-| **3** | `BUTTON_REGISTER_POSTERIORE` | `0x0008` | Register Posterior |
-| **4** | `BUTTON_ANILOX_AV_ANTERIORE` | `0x0010` | Anilox Advance Anterior |
-| **5** | `BUTTON_ANILOX_IN_ANTERIORE` | `0x0020` | Anilox Retract Anterior |
-| **6** | `BUTTON_ANILOX_AV_POSTERIORE` | `0x0040` | Anilox Advance Posterior |
-| **7** | `BUTTON_ANILOX_IN_POSTERIORE` | `0x0080` | Anilox Retract Posterior |
-| **8** | `BUTTON_CLICHE_AV_ANTERIORE` | `0x0100` | Cliche Advance Anterior |
-| **9** | `BUTTON_CLICHE_IN_ANTERIORE` | `0x0200` | Cliche Retract Anterior |
-| **10** | `BUTTON_CLICHE_AV_POSTERIORE` | `0x0400` | Cliche Advance Posterior |
-| **11** | `BUTTON_CLICHE_IN_POSTERIORE` | `0x0800` | Cliche Retract Posterior |
-| **12** | `BUTTON_COLOR_ATTACCO` | `0x1000` | Color Engage (Attacco) |
-| **13** | `BUTTON_COLOR_STACCO` | `0x2000` | Color Disengage (Stacco) |
-| **14** | `BUTTON_COLOR_COLORE` | `0x4000` | Color Wash / Pump |
+| Button Index | Bitmask Constant | Hex Mask | Matrix Pins | Function |
+| :--- | :--- | :--- | :--- | :--- |
+| **0** | `BUTTON_REGISTER_AVANTI` | `0x0001` | D9 - D3 | Register Advance |
+| **1** | `BUTTON_REGISTER_INDIETRO` | `0x0002` | D9 - D4 | Register Retract |
+| **2** | `BUTTON_REGISTER_ABTERIORE` | `0x0004` | D9 - D5 | Register Anterior / Offset |
+| **3** | `BUTTON_REGISTER_POSTERIORE` | `0x0008` | D9 - D6 | Register Posterior |
+| **4** | `BUTTON_ANILOX_AV_ANTERIORE` | `0x0010` | D18 - D3 | Anilox Advance Anterior |
+| **5** | `BUTTON_ANILOX_AV_POSTERIORE` | `0x0020` | D18 - D4 | Anilox Advance Posterior |
+| **6** | `BUTTON_ANILOX_IN_ANTERIORE` | `0x0040` | D18 - D5 | Anilox Retract Anterior |
+| **7** | `BUTTON_ANILOX_IN_POSTERIORE` | `0x0080` | D18 - D6 | Anilox Retract Posterior |
+| **8** | `BUTTON_CLICHE_AV_ANTERIORE` | `0x0100` | D19 - D3 | Cliche Advance Anterior |
+| **9** | `BUTTON_CLICHE_IN_ANTERIORE` | `0x0200` | D19 - D4 | Cliche Retract Anterior |
+| **10** | `BUTTON_CLICHE_AV_POSTERIORE` | `0x0400` | D19 - D5 | Cliche Advance Posterior |
+| **11** | `BUTTON_CLICHE_IN_POSTERIORE` | `0x0800` | D19 - D6 | Cliche Retract Posterior |
+| **12** | `BUTTON_COLOR_ATTACCO` | `0x1000` | D20 - D3 | Color Engage (Attacco) |
+| **13** | `BUTTON_COLOR_STACCO` | `0x2000` | D20 - D4 | Color Disengage (Stacco) |
+| **14** | `BUTTON_COLOR_COLORE` | `0x4000` | D20 - D5 | Color Wash / Pump |
+| **15** | `BUTTON_ESTOP_ACTIVE` | `0x8000` | D20 - D6 | Emergency / Safety Stop |
 
 ---
 
